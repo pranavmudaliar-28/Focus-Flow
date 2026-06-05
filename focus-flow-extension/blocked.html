@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Focus Flow – Stay On Track</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body {
+      background: #020817;
+      color: #e2e8f0;
+      font-family: 'Space Grotesk', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .bg-orbs {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .orb {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(80px);
+      opacity: 0.15;
+      animation: drift 8s ease-in-out infinite;
+    }
+
+    .orb-1 { width: 500px; height: 500px; background: #6366f1; top: -100px; left: -100px; animation-delay: 0s; }
+    .orb-2 { width: 400px; height: 400px; background: #06b6d4; bottom: -100px; right: -100px; animation-delay: 3s; }
+    .orb-3 { width: 300px; height: 300px; background: #8b5cf6; top: 50%; left: 50%; transform: translate(-50%, -50%); animation-delay: 1.5s; }
+
+    @keyframes drift {
+      0%, 100% { transform: translate(0, 0); }
+      50% { transform: translate(30px, -30px); }
+    }
+
+    .container {
+      position: relative;
+      z-index: 1;
+      text-align: center;
+      max-width: 580px;
+      padding: 60px 40px;
+      background: rgba(15, 23, 42, 0.7);
+      border: 1px solid rgba(99, 102, 241, 0.2);
+      border-radius: 24px;
+      backdrop-filter: blur(20px);
+      animation: fadeIn 0.6s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: scale(0.95) translateY(10px); }
+      to { opacity: 1; transform: scale(1) translateY(0); }
+    }
+
+    .shield-icon {
+      width: 80px;
+      height: 80px;
+      margin: 0 auto 28px;
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(139, 92, 246, 0.2));
+      border-radius: 20px;
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 36px;
+      animation: pulse-glow 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse-glow {
+      0%, 100% { box-shadow: 0 0 20px rgba(99, 102, 241, 0.2); }
+      50% { box-shadow: 0 0 40px rgba(99, 102, 241, 0.4); }
+    }
+
+    .blocked-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: #6366f1;
+      margin-bottom: 12px;
+      opacity: 0.8;
+    }
+
+    h1 {
+      font-size: 32px;
+      font-weight: 700;
+      line-height: 1.2;
+      margin-bottom: 10px;
+      background: linear-gradient(135deg, #e2e8f0, #94a3b8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .site-name {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      color: #64748b;
+      margin-bottom: 28px;
+      padding: 6px 14px;
+      background: rgba(99, 102, 241, 0.08);
+      border: 1px solid rgba(99, 102, 241, 0.15);
+      border-radius: 8px;
+      display: inline-block;
+    }
+
+    .session-info {
+      background: rgba(99, 102, 241, 0.08);
+      border: 1px solid rgba(99, 102, 241, 0.2);
+      border-radius: 14px;
+      padding: 20px 28px;
+      margin-bottom: 28px;
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      text-align: left;
+    }
+
+    .timer-display {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 36px;
+      font-weight: 500;
+      color: #6366f1;
+      min-width: 80px;
+    }
+
+    .session-details .label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #64748b;
+      margin-bottom: 4px;
+    }
+
+    .session-details .value {
+      font-size: 18px;
+      font-weight: 600;
+      color: #e2e8f0;
+    }
+
+    .motivation-text {
+      font-size: 15px;
+      color: #94a3b8;
+      line-height: 1.6;
+      margin-bottom: 32px;
+      font-style: italic;
+    }
+
+    .buttons {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+    }
+
+    .btn-back {
+      padding: 13px 28px;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      letter-spacing: 0.02em;
+    }
+
+    .btn-back:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(99, 102, 241, 0.4);
+    }
+
+    .btn-stop {
+      padding: 13px 28px;
+      background: transparent;
+      color: #64748b;
+      border: 1px solid rgba(100, 116, 139, 0.3);
+      border-radius: 12px;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-stop:hover {
+      color: #94a3b8;
+      border-color: rgba(100, 116, 139, 0.5);
+      background: rgba(100, 116, 139, 0.08);
+    }
+
+    .quote {
+      margin-top: 32px;
+      padding-top: 24px;
+      border-top: 1px solid rgba(99, 102, 241, 0.1);
+      font-size: 13px;
+      color: #475569;
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-orbs">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+  </div>
+
+  <div class="container">
+    <div class="shield-icon">🎯</div>
+    <div class="blocked-label">Focus Flow Active</div>
+    <h1>Stay in the zone</h1>
+    <div class="site-name" id="site-display">Loading...</div>
+
+    <div class="session-info">
+      <div class="timer-display" id="timer-display">--</div>
+      <div class="session-details">
+        <div class="label">Current Session</div>
+        <div class="value" id="session-name">Deep Work</div>
+        <div class="label" style="margin-top:6px;">Time remaining</div>
+      </div>
+    </div>
+
+    <p class="motivation-text" id="motivation-text">
+      "The ability to focus is the superpower of the 21st century."
+    </p>
+
+    <div class="buttons">
+      <button class="btn-back">← Keep Focusing</button>
+      <button class="btn-stop">End Session</button>
+    </div>
+
+    <div class="quote" id="quote-text"></div>
+  </div>
+
+  <script src="blocked.js"></script>
+</body>
+</html>

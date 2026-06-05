@@ -1,0 +1,62 @@
+{
+  "manifest_version": 3,
+  "name": "Focus Flow – Smart Deep Work Timer",
+  "version": "3.0.0",
+  "description": "Deep work timer with ambient sounds, site blocking, streak tracking & team org mode. Block distractions and focus — free for individuals, built for teams.",
+  "homepage_url": "https://slasheasy.com",
+  "minimum_chrome_version": "100",
+  "permissions": [
+    "tabs",
+    "storage",
+    "alarms",
+    "notifications",
+    "activeTab",
+    "scripting",
+    "webNavigation",
+    "identity"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "dist/background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "dist/content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["blocked.html", "welcome.html", "audio.html"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "oauth2": {
+    "client_id": "713595575747-op1d8udu1j3e73gu7b8oqsrl6ot524i4.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/userinfo.email",
+      "https://www.googleapis.com/auth/userinfo.profile"
+    ]
+  }
+}

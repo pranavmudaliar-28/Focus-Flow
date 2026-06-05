@@ -1,0 +1,70 @@
+import { initializeApp } from 'firebase/app'
+import { getFunctions } from 'firebase/functions'
+import {
+  getAuth,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  sendPasswordResetEmail,
+  fetchSignInMethodsForEmail,
+  confirmPasswordReset,
+  verifyPasswordResetCode,
+} from 'firebase/auth'
+import {
+  getFirestore,
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  addDoc,
+  deleteDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+  onSnapshot,
+  serverTimestamp,
+  orderBy,
+  limit,
+} from 'firebase/firestore'
+
+const firebaseConfig = {
+  apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain:        import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId:         import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket:     import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId:             import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId:     import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
+}
+
+export const app = initializeApp(firebaseConfig)
+export const auth = getAuth(app)
+export const db = getFirestore(app)
+export const functions = getFunctions(app)
+
+export {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  sendPasswordResetEmail,
+  fetchSignInMethodsForEmail,
+  confirmPasswordReset,
+  verifyPasswordResetCode,
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  addDoc,
+  deleteDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+  onSnapshot,
+  serverTimestamp,
+  orderBy,
+  limit,
+}

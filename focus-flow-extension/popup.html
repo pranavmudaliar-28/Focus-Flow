@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Focus Flow</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg:        #0d1117;
+      --bg-2:      #161b22;
+      --bg-3:      #1c2333;
+      --bg-h:      #21262d;
+      --border:    #30363d;
+      --b-acc:     rgba(99,102,241,0.4);
+      --acc:       #6366f1;
+      --acc-l:     #818cf8;
+      --acc-g:     rgba(99,102,241,0.2);
+      --green:     #3fb950;
+      --yellow:    #d29922;
+      --red:       #f85149;
+      --t1:        #e6edf3;
+      --t2:        #8b949e;
+      --t3:        #484f58;
+      --r:         10px;
+      /* Elevation */
+      --shadow-card:   0 2px 8px rgba(0,0,0,.45);
+      --shadow-active: 0 0 0 1px var(--acc), 0 4px 16px rgba(99,102,241,.25);
+    }
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{width:400px;background:var(--bg);color:var(--t1);font-family:'Space Grotesk',system-ui,sans-serif;font-size:13px;line-height:1.55;overflow:hidden;-webkit-font-smoothing:antialiased}
+    .scroll{max-height:560px;overflow-y:auto;overflow-x:hidden}
+    .scroll::-webkit-scrollbar{width:3px}
+    .scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+    /* Header */
+    .hdr{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--bg);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10}
+    .logo{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:700;letter-spacing:-.01em}
+    .logo-ico{width:28px;height:28px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 0 10px var(--acc-g)}
+    .hdr-r{display:flex;align-items:center;gap:8px}
+    .streak{display:flex;align-items:center;gap:4px;background:rgba(210,153,34,.1);border:1px solid rgba(210,153,34,.25);border-radius:20px;padding:3px 9px 3px 6px;font-size:11px;font-weight:600;color:#e3b341}
+    .dot{width:8px;height:8px;border-radius:50%;background:var(--border);transition:all .3s}
+    .dot.on{background:var(--green);box-shadow:0 0 8px rgba(63,185,80,.5);animation:glow 2s infinite}
+    @keyframes glow{0%,100%{box-shadow:0 0 6px rgba(63,185,80,.4)}50%{box-shadow:0 0 14px rgba(63,185,80,.7)}}
+
+    /* Nav — pill style */
+    .nav{display:flex;background:var(--bg);border-bottom:1px solid var(--border);padding:5px 8px;gap:2px}
+    .ntab{flex:1;padding:7px 4px;background:none;border:none;border-radius:8px;color:var(--t2);font-family:'Space Grotesk',sans-serif;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;transition:all .2s ease;display:flex;align-items:center;justify-content:center;gap:4px}
+    .ntab:hover{color:var(--t1);background:var(--bg-3)}
+    .ntab.on{color:var(--acc-l);background:rgba(99,102,241,.2);box-shadow:0 0 0 1px rgba(99,102,241,.35)}
+
+    /* Panels */
+    .pnl{display:none;padding:16px}
+    .pnl.on{display:block}
+
+    /* ── Timer ── */
+    .ring-wrap{position:relative;width:148px;height:148px;margin:0 auto 16px}
+    .ring-wrap::before{content:'';position:absolute;inset:-24px;border-radius:50%;background:radial-gradient(circle,rgba(99,102,241,.1) 0%,transparent 65%);pointer-events:none}
+    .ring-svg{width:148px;height:148px;transform:rotate(-90deg);filter:drop-shadow(0 0 10px var(--acc-g))}
+    .rt{fill:none;stroke:var(--bg-3);stroke-width:7}
+    .rf{fill:none;stroke:url(#G);stroke-width:7;stroke-linecap:round;stroke-dasharray:408;stroke-dashoffset:408;transition:stroke-dashoffset .35s ease-out}
+    .ring-wrap.urgent .ring-svg{animation:urgentPulse 1.5s ease-in-out infinite}
+    @keyframes urgentPulse{0%,100%{filter:drop-shadow(0 0 6px rgba(99,102,241,.4))}50%{filter:drop-shadow(0 0 18px rgba(99,102,241,.9))}}
+    .ring-mid{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+    .ring-time{font-family:'JetBrains Mono',monospace;font-size:30px;font-weight:600;color:var(--t1);letter-spacing:-.02em;line-height:1}
+    .ring-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:var(--t3)}
+    .ring-label.run{color:var(--acc)}
+
+    .sess-badge{display:flex;justify-content:center;margin-bottom:16px}
+    .sbadge{display:inline-flex;align-items:center;gap:6px;padding:5px 13px;background:var(--bg-2);border:1px solid var(--border);border-radius:20px;font-size:12px;font-weight:500;color:var(--t2);max-width:230px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+    .sbadge.run{background:rgba(99,102,241,.08);border-color:var(--b-acc);color:var(--acc-l)}
+
+    .prog-wrap{height:3px;background:var(--bg-3);border-radius:2px;margin-bottom:14px;overflow:hidden;display:none}
+    .prog-fill{height:100%;background:linear-gradient(90deg,#6366f1,#8b5cf6,#06b6d4);border-radius:2px;transition:width .8s ease;width:0%}
+
+    /* Setup */
+    .setup{display:flex;flex-direction:column;gap:12px}
+    .flabel{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--t2);margin-bottom:5px}
+    .finput{width:100%;padding:9px 12px;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--r);color:var(--t1);font-family:'Space Grotesk',sans-serif;font-size:13px;outline:none;transition:border-color .2s,box-shadow .2s}
+    .finput:focus{border-color:var(--b-acc);box-shadow:0 0 0 3px var(--acc-g)}
+    .finput::placeholder{color:var(--t3)}
+
+    .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
+    .chip{padding:4px 10px;background:var(--bg-3);border:1px solid var(--border);border-radius:20px;font-size:11px;font-weight:500;color:var(--t2);cursor:pointer;transition:all .15s;user-select:none}
+    .chip:hover{background:var(--bg-h);border-color:rgba(99,102,241,.35);color:var(--acc-l)}
+
+    .dur-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
+    .dbtn{padding:9px 4px;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--r);color:var(--t2);font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:500;cursor:pointer;text-align:center;transition:all .15s}
+    .dbtn span{display:block;font-size:9px;font-family:'Space Grotesk',sans-serif;color:var(--t3);margin-top:2px;text-transform:uppercase;letter-spacing:.06em}
+    .dbtn:hover{border-color:rgba(99,102,241,.35);color:var(--t1);background:var(--bg-h)}
+    .dbtn.sel{background:rgba(99,102,241,.18);border-color:var(--acc);color:var(--acc-l);box-shadow:0 0 0 1px rgba(99,102,241,.3)}
+    .dbtn.sel span{color:var(--acc-l);opacity:.8;font-weight:700}
+
+    .cust-row{display:flex;align-items:center;gap:8px;margin-top:8px}
+    .cust-row input{width:80px;padding:8px 10px;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--r);color:var(--t1);font-family:'JetBrains Mono',monospace;font-size:13px;outline:none;transition:border-color .2s}
+    .cust-row input:focus{border-color:var(--b-acc)}
+    .cust-row label{font-size:12px;color:var(--t2)}
+
+    .btn-go{width:100%;padding:12px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border:none;border-radius:var(--r);font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:700;cursor:pointer;letter-spacing:.02em;transition:all .2s;box-shadow:0 4px 14px var(--acc-g)}
+    .btn-go:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(99,102,241,.4)}
+    .btn-go:active{transform:translateY(0)}
+
+    .btn-end{width:100%;padding:11px;background:transparent;color:var(--red);border:1px solid rgba(248,81,73,.3);border-radius:var(--r);font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s}
+    .btn-end:hover{background:rgba(248,81,73,.08);border-color:rgba(248,81,73,.5)}
+
+    /* ── Sounds ── */
+    .s-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+    .s-title{font-size:12px;font-weight:700;color:var(--t1);text-transform:uppercase;letter-spacing:.06em}
+    .playing{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--acc);font-weight:600}
+    .eq{display:flex;align-items:flex-end;gap:2px;height:12px}
+    .eq-b{width:3px;background:var(--acc);border-radius:2px;animation:eq .6s ease-in-out infinite alternate}
+    .eq-b:nth-child(1){animation-delay:0s;height:5px}
+    .eq-b:nth-child(2){animation-delay:.15s;height:10px}
+    .eq-b:nth-child(3){animation-delay:.3s;height:7px}
+    .eq-b:nth-child(4){animation-delay:.1s;height:12px}
+    @keyframes eq{from{transform:scaleY(.35)}to{transform:scaleY(1)}}
+
+    .sgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px}
+    .scard{padding:13px 10px 11px;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--r);cursor:pointer;text-align:center;transition:all .2s ease;position:relative}
+    .scard:hover{border-color:rgba(99,102,241,.5);background:var(--bg-3);transform:translateY(-2px);box-shadow:0 4px 16px rgba(0,0,0,.5)}
+    .scard.on{background:linear-gradient(135deg,rgba(99,102,241,.28),rgba(139,92,246,.18));border-color:var(--acc);box-shadow:0 0 0 1px var(--acc),0 4px 20px rgba(99,102,241,.35)}
+    .s-emoji{font-size:24px;margin-bottom:5px;display:block}
+    .s-name{font-size:11px;font-weight:600;color:var(--t2);display:block}
+    .scard.on .s-name{color:var(--acc-l)}
+    .s-sub{font-size:10px;color:var(--t3);display:block;margin-top:1px}
+
+    .vol-sec{margin-bottom:14px}
+    .vol-row{display:flex;align-items:center;gap:10px}
+    .vico{font-size:13px;color:var(--t2);width:16px;text-align:center}
+    input[type=range]{flex:1;-webkit-appearance:none;appearance:none;height:4px;background:var(--bg-3);border-radius:4px;outline:none}
+    input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:14px;height:14px;border-radius:50%;background:var(--acc);cursor:pointer;box-shadow:0 0 6px var(--acc-g);transition:transform .15s}
+    input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.25)}
+    .vval{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t2);width:30px;text-align:right}
+
+    .mix-box{background:var(--bg-2);border:1px solid var(--border);border-radius:var(--r);padding:12px;display:none}
+    .mix-box.show{display:block}
+    .mix-title{font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px}
+    .mix-row{display:flex;align-items:center;gap:10px;margin-bottom:7px}
+    .mix-row:last-child{margin-bottom:0}
+    .mname{font-size:11px;color:var(--t2);width:72px;flex-shrink:0}
+
+    /* ── Stats ── */
+    .sg{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px}
+    .sbox{background:var(--bg-2);border:1px solid var(--border);border-radius:var(--r);padding:13px 10px;text-align:center;border-left-width:2px}
+    .sbox-1{border-left-color:#6366f1}
+    .sbox-2{border-left-color:#06b6d4}
+    .sbox-3{border-left-color:#f59e0b}
+    .snum{font-family:'JetBrains Mono',monospace;font-size:24px;font-weight:700;color:var(--acc-l);line-height:1;font-feature-settings:'tnum'}
+    .slbl{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-top:5px;font-weight:600}
+
+    .sec-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t2);margin-bottom:8px}
+    .heatmap{display:flex;gap:5px;margin-bottom:14px}
+    .hday{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px}
+    .hcell{width:100%;aspect-ratio:1;border-radius:5px;background:var(--bg-3)}
+    .hcell.l1{background:rgba(99,102,241,.2)}
+    .hcell.l2{background:rgba(99,102,241,.45)}
+    .hcell.l3{background:rgba(99,102,241,.7)}
+    .hcell.l4{background:#6366f1;box-shadow:0 0 6px var(--acc-g)}
+    .hlbl{font-size:9px;color:var(--t3);font-weight:600;text-transform:uppercase}
+
+    .hist-wrap{max-height:180px;overflow-y:auto;display:flex;flex-direction:column;gap:5px}
+    .hist-wrap::-webkit-scrollbar{width:3px}
+    .hist-wrap::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+    .hi{display:flex;align-items:center;padding:9px 12px;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--r);gap:10px;transition:background .15s,border-color .15s;cursor:default}
+    .hi:hover{background:var(--bg-h);border-color:rgba(99,102,241,.2)}
+    .hdot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+    .hdot.d{background:var(--green)}
+    .hdot.p{background:var(--yellow)}
+    .hinfo{flex:1;min-width:0}
+    .hname{font-size:12px;font-weight:600;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .hmeta{font-size:10px;color:var(--t3);margin-top:1px}
+    .hrgt{text-align:right;flex-shrink:0}
+    .hmins{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t2)}
+    .hbadge{font-size:9px;font-weight:700;padding:2px 6px;border-radius:10px;display:inline-block;margin-top:2px}
+    .bd{background:rgba(63,185,80,.12);color:var(--green);border:1px solid rgba(63,185,80,.25)}
+    .bp{background:rgba(210,153,34,.12);color:#e3b341;border:1px solid rgba(210,153,34,.25)}
+
+    /* ── Block ── */
+    .bn{display:flex;gap:10px;padding:10px 12px;background:rgba(63,185,80,.07);border:1px solid rgba(63,185,80,.2);border-radius:var(--r);margin-bottom:12px}
+    .bn-ico{font-size:15px;flex-shrink:0}
+    .bn-txt{font-size:11px;color:var(--t2);line-height:1.55}
+    .bn-txt strong{color:#56d364}
+    .add-row{display:flex;gap:7px;margin-bottom:12px}
+    .add-row input{flex:1;padding:8px 11px;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--r);color:var(--t1);font-family:'Space Grotesk',sans-serif;font-size:12px;outline:none;transition:border-color .2s}
+    .add-row input:focus{border-color:var(--b-acc)}
+    .add-row input::placeholder{color:var(--t3)}
+    .btn-add{padding:8px 14px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border:none;border-radius:var(--r);font-family:'Space Grotesk',sans-serif;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;transition:opacity .15s}
+    .btn-add:hover{opacity:.85}
+    .dlist{display:flex;flex-direction:column;gap:5px;max-height:290px;overflow-y:auto}
+    .dlist::-webkit-scrollbar{width:3px}
+    .dlist::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+    .drow{display:flex;align-items:center;padding:8px 12px;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--r);transition:all .15s}
+    .drow:hover{border-color:rgba(99,102,241,.3);background:var(--bg-h)}
+    .dico{font-size:13px;margin-right:9px;flex-shrink:0}
+    .dname{flex:1;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t2)}
+    .xbtn{width:22px;height:22px;background:rgba(248,81,73,.08);border:1px solid rgba(248,81,73,.2);border-radius:6px;color:var(--red);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s;flex-shrink:0}
+    .xbtn:hover{background:rgba(248,81,73,.18)}
+
+    .empty{text-align:center;padding:28px 20px;color:var(--t3)}
+    .eico{font-size:28px;margin-bottom:8px}
+    .etxt{font-size:12px;line-height:1.6}
+    .divider{height:1px;background:var(--border);margin:12px 0}
+
+    .toast{position:fixed;bottom:12px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--bg-3);border:1px solid var(--border);border-radius:20px;padding:7px 16px;font-size:12px;color:var(--t1);opacity:0;transition:all .3s;pointer-events:none;white-space:nowrap;z-index:100}
+    .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+    /* ── Auth Overlay ── */
+    #auth-overlay {
+      position: fixed; inset: 0; background: var(--bg); z-index: 50;
+      display: flex; flex-direction: column; padding: 24px; justify-content: center;
+      transition: opacity 0.3s;
+    }
+    .auth-box {
+      background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px; padding: 20px;
+    }
+    .auth-title { font-size: 18px; font-weight: 700; color: var(--t1); text-align: center; margin-bottom: 16px; }
+    .auth-inp { width: 100%; padding: 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--t1); margin-bottom: 12px; font-size: 13px; }
+    .auth-inp:focus { border-color: var(--acc); outline: none; }
+    .auth-btn { width: 100%; padding: 10px; background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #fff; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; margin-bottom: 12px; transition: opacity 0.2s; }
+    .auth-btn:hover { opacity: 0.9; }
+    .auth-btn.google { background: #fff; color: #333; display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 0; }
+    .auth-btn.google svg { width: 16px; height: 16px; }
+    .auth-divider { display: flex; align-items: center; margin: 16px 0; color: var(--t3); font-size: 11px; font-weight: 600; }
+    .auth-divider::before, .auth-divider::after { content: ""; flex: 1; border-bottom: 1px solid var(--border); }
+    .auth-divider span { padding: 0 10px; }
+    .auth-toggle { font-size: 11px; color: var(--acc-l); text-align: center; cursor: pointer; margin-top: 12px; }
+    .auth-toggle:hover { text-decoration: underline; }
+    .auth-error { font-size: 11px; color: var(--red); text-align: center; margin-bottom: 12px; display: none; }
+    .auth-loader { display: none; text-align: center; color: var(--t2); font-size: 12px; margin-top: 12px; }
+    .user-info { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--bg-2); border-bottom: 1px solid var(--border); }
+    .user-email { font-size: 11px; color: var(--t2); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .btn-logout { font-size: 10px; color: var(--red); background: none; border: 1px solid var(--red); border-radius: 4px; padding: 3px 8px; cursor: pointer; }
+    .btn-logout:hover { background: rgba(248,81,73,0.1); }
+
+    /* ── Org Mode ── */
+    .org-badge{display:none;align-items:center;gap:4px;background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.25);border-radius:20px;padding:3px 9px;font-size:10px;font-weight:600;color:var(--acc-l)}
+    .drow.locked{border-color:rgba(99,102,241,.2);background:rgba(99,102,241,.04)}
+    .drow.locked:hover{border-color:rgba(99,102,241,.35)}
+    .drow.locked .dname{color:var(--t2)}
+    .lock-ico{font-size:11px;margin-left:auto;color:var(--acc-l);opacity:.7}
+    .org-section{border-top:1px solid var(--border);margin-top:14px;padding-top:14px}
+    .org-connect-card{background:var(--bg-2);border:1px solid var(--border);border-radius:var(--r);padding:13px}
+    .org-err{font-size:11px;color:var(--red);margin-top:6px;display:none}
+    .org-code-inp{width:100%;padding:9px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r);color:var(--acc-l);font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:600;letter-spacing:.15em;text-align:center;outline:none;text-transform:uppercase;margin-bottom:10px;transition:border-color .2s}
+    .org-code-inp:focus{border-color:var(--b-acc)}
+    .org-code-inp::placeholder{color:var(--t3);font-size:12px;letter-spacing:.03em;font-weight:400}
+    .btn-leave{background:none;border:none;font-size:10px;color:var(--t3);cursor:pointer;margin-top:10px;text-decoration:underline;display:block}
+    .btn-leave:hover{color:var(--red)}
+  </style>
+</head>
+<body>
+
+<!-- ══ AUTH OVERLAY ══ -->
+<div id="auth-overlay">
+  <div style="text-align:center; margin-bottom: 24px;">
+    <div class="logo-ico" style="margin: 0 auto 12px; width: 48px; height: 48px; font-size: 24px;">🎯</div>
+    <h2 style="font-size: 22px; font-weight: 700;">Focus Flow</h2>
+    <p style="color: var(--t2); font-size: 12px; margin-top: 4px;">Log in to sync your blocklist</p>
+  </div>
+  
+  <div class="auth-box">
+    <div class="auth-title" id="auth-mode-title">Log In</div>
+    <div class="auth-error" id="auth-error">Error message</div>
+    
+    <input type="email" id="auth-email" class="auth-inp" placeholder="Email Address">
+    <div style="position: relative; margin-bottom: 12px;">
+      <input type="password" id="auth-pwd" class="auth-inp" placeholder="Password" style="margin-bottom: 0; padding-right: 36px;">
+      <button id="auth-pwd-toggle" type="button" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: var(--t3); font-size: 14px; outline: none; z-index: 10;">👁️</button>
+    </div>
+    
+    <button class="auth-btn" id="btn-auth-action">Log In</button>
+    <div class="auth-divider"><span>OR</span></div>
+    
+    <button class="auth-btn google" id="btn-google">
+      <svg viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+      Continue with Google
+    </button>
+    
+    <div class="auth-toggle" id="btn-auth-toggle">Need an account? Sign Up</div>
+    <div class="auth-loader" id="auth-loader">Authenticating...</div>
+  </div>
+</div>
+
+<div class="user-info" id="user-info-bar" style="display:none;">
+  <div class="user-email" id="user-email-display">user@example.com</div>
+  <button class="btn-logout" id="btn-logout">Logout</button>
+</div>
+
+<div id="announcement-bar" style="display:none; background: rgba(99, 102, 241, 0.15); border-bottom: 1px solid rgba(99, 102, 241, 0.3); padding: 8px 12px; font-size: 11px; color: var(--acc-l); text-align: center; font-weight: 500;">
+  📢 <span id="announcement-text"></span>
+</div>
+
+<div class="hdr">
+  <div class="logo">
+    <div class="logo-ico">🎯</div>
+    Focus Flow
+  </div>
+  <div class="hdr-r">
+    <div class="org-badge" id="org-badge">🏢 <span id="org-badge-name"></span></div>
+    <div class="streak">🔥 <span id="streak-val">0</span></div>
+    <div class="dot" id="status-dot"></div>
+  </div>
+</div>
+
+<div class="nav">
+  <button class="ntab on" data-tab="focus">⏱ Timer</button>
+  <button class="ntab" data-tab="sounds">🎵 Sounds</button>
+  <button class="ntab" data-tab="stats">📊 Stats</button>
+  <button class="ntab" data-tab="block">🔒 Block</button>
+  <button class="ntab" data-tab="org">🏢 Org</button>
+</div>
+
+<div class="scroll">
+
+  <!-- ══ TIMER ══ -->
+  <div class="pnl on" id="pnl-focus">
+    <div class="ring-wrap">
+      <svg class="ring-svg" viewBox="0 0 148 148">
+        <defs>
+          <linearGradient id="G" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%"   stop-color="#6366f1"/>
+            <stop offset="50%"  stop-color="#8b5cf6"/>
+            <stop offset="100%" stop-color="#06b6d4"/>
+          </linearGradient>
+        </defs>
+        <circle class="rt" cx="74" cy="74" r="65"/>
+        <circle class="rf" cx="74" cy="74" r="65" id="ring"/>
+      </svg>
+      <div class="ring-mid">
+        <div class="ring-time" id="t-time">25:00</div>
+        <div class="ring-label" id="t-lbl">READY</div>
+      </div>
+    </div>
+
+    <div class="sess-badge">
+      <div class="sbadge" id="sbadge">
+        <span>💼</span><span id="sbadge-txt">No active session</span>
+      </div>
+    </div>
+
+    <div class="prog-wrap" id="prog-wrap">
+      <div class="prog-fill" id="prog-fill"></div>
+    </div>
+
+    <!-- IDLE -->
+    <div class="setup" id="setup-form">
+      <div>
+        <div class="flabel">What are you working on?</div>
+        <input class="finput" id="task-inp" type="text" placeholder="e.g. Fix bug, Write essay, Read chapter…" maxlength="60" autocomplete="off">
+        <div class="chips">
+          <div class="chip" data-v="Deep Work">🧠 Deep Work</div>
+          <div class="chip" data-v="Coding">💻 Coding</div>
+          <div class="chip" data-v="Reading">📖 Reading</div>
+          <div class="chip" data-v="Writing">✍️ Writing</div>
+          <div class="chip" data-v="Study">🎓 Study</div>
+          <div class="chip" data-v="Design">🎨 Design</div>
+        </div>
+      </div>
+      <div>
+        <div class="flabel">Duration</div>
+        <div class="dur-grid">
+          <button class="dbtn" data-val="15">15<span>Short</span></button>
+          <button class="dbtn sel" data-val="25">25<span>Classic</span></button>
+          <button class="dbtn" data-val="45">45<span>Long</span></button>
+          <button class="dbtn" data-val="90">90<span>Deep</span></button>
+        </div>
+        <div class="cust-row">
+          <input type="number" id="cust-dur" min="1" max="240" placeholder="Own">
+          <label for="cust-dur">minutes</label>
+        </div>
+      </div>
+      <button class="btn-go" id="btn-start">🚀 Start Focus Session</button>
+    </div>
+
+    <!-- ACTIVE -->
+    <div id="active-ctrl" style="display:none">
+      <button class="btn-end" id="btn-stop">⏹ End Session</button>
+    </div>
+  </div>
+
+  <!-- ══ SOUNDS ══ -->
+  <div class="pnl" id="pnl-sounds">
+    <div class="s-header">
+      <div class="s-title">Ambient Sounds</div>
+      <div class="playing" id="now-play" style="display:none">
+        <div class="eq"><div class="eq-b"></div><div class="eq-b"></div><div class="eq-b"></div><div class="eq-b"></div></div>
+        <span id="now-name">—</span>
+      </div>
+    </div>
+
+    <div class="sgrid">
+      <div class="scard" data-snd="rain">
+        <span class="s-emoji">🌧️</span><span class="s-name">Rain</span><span class="s-sub">Light shower</span>
+      </div>
+      <div class="scard" data-snd="storm">
+        <span class="s-emoji">⛈️</span><span class="s-name">Storm</span><span class="s-sub">Heavy rain</span>
+      </div>
+      <div class="scard" data-snd="forest">
+        <span class="s-emoji">🌲</span><span class="s-name">Forest</span><span class="s-sub">Leaves & birds</span>
+      </div>
+      <div class="scard" data-snd="ocean">
+        <span class="s-emoji">🌊</span><span class="s-name">Ocean</span><span class="s-sub">Rolling waves</span>
+      </div>
+      <div class="scard" data-snd="fire">
+        <span class="s-emoji">🔥</span><span class="s-name">Fireplace</span><span class="s-sub">Crackling logs</span>
+      </div>
+      <div class="scard" data-snd="cafe">
+        <span class="s-emoji">☕</span><span class="s-name">Café</span><span class="s-sub">Coffee chatter</span>
+      </div>
+      <div class="scard" data-snd="wind">
+        <span class="s-emoji">🍃</span><span class="s-name">Wind</span><span class="s-sub">Gentle breeze</span>
+      </div>
+      <div class="scard" data-snd="brown">
+        <span class="s-emoji">🎧</span><span class="s-name">Brown Noise</span><span class="s-sub">Deep focus</span>
+      </div>
+      <div class="scard" data-snd="white">
+        <span class="s-emoji">📻</span><span class="s-name">White Noise</span><span class="s-sub">Mask all</span>
+      </div>
+    </div>
+
+    <div class="vol-sec">
+      <div class="flabel" style="margin-bottom:8px">Master Volume</div>
+      <div class="vol-row">
+        <span class="vico">🔇</span>
+        <input type="range" id="vol-master" min="0" max="100" value="60">
+        <span class="vval" id="vval">60%</span>
+      </div>
+    </div>
+
+    <div class="mix-box" id="mix-box">
+      <div class="mix-title">🎛 Layer Mix</div>
+      <div class="mix-row">
+        <span class="mname" id="mn1">Base</span>
+        <input type="range" id="ml1" min="0" max="100" value="70">
+      </div>
+      <div class="mix-row">
+        <span class="mname" id="mn2">Texture</span>
+        <input type="range" id="ml2" min="0" max="100" value="40">
+      </div>
+    </div>
+    <div style="margin-top:12px;padding:10px 12px;background:rgba(99,102,241,.07);border:1px solid rgba(99,102,241,.18);border-radius:10px;">
+      <div style="font-size:11px;color:var(--t2);line-height:1.6;margin-bottom:8px;">
+        🔊 Sound plays in a <strong style="color:var(--acc-l)">pinned background tab</strong> — keeps going even when popup closes. Minimise that tab, do not close it.
+      </div>
+      <button id="audio-tab-btn" style="background:none;border:none;font-size:12px;font-weight:600;color:var(--acc-l);cursor:pointer;padding:0;">
+        ▶ Open audio tab
+      </button>
+    </div>
+  </div>
+
+  <!-- ══ STATS ══ -->
+  <div class="pnl" id="pnl-stats">
+    <div class="sg">
+      <div class="sbox sbox-1"><div class="snum" id="s-sess">0</div><div class="slbl">Sessions</div></div>
+      <div class="sbox sbox-2"><div class="snum" id="s-time">0m</div><div class="slbl">Focus Time</div></div>
+      <div class="sbox sbox-3"><div class="snum" id="s-best">0</div><div class="slbl">Best Streak</div></div>
+    </div>
+    <div class="sec-title">Last 7 Days</div>
+    <div class="heatmap" id="heatmap"></div>
+    <div class="divider"></div>
+    <div class="sec-title">Recent Sessions</div>
+    <div class="hist-wrap" id="hist-list"></div>
+  </div>
+
+  <!-- ══ BLOCK ══ -->
+  <div class="pnl" id="pnl-block">
+    <div class="bn">
+      <div class="bn-ico">📺</div>
+      <div class="bn-txt"><strong>YouTube is allowed by default</strong> — it's a learning platform. Add it below only if you want stricter sessions.</div>
+    </div>
+    <div class="add-row">
+      <input type="text" id="d-inp" placeholder="Add site (e.g. twitter.com)">
+      <button class="btn-add" id="btn-add-d">+ Add</button>
+    </div>
+    <div class="dlist" id="d-list"></div>
+  </div>
+
+  <!-- ══ ORG ══ -->
+  <div class="pnl" id="pnl-org">
+    <!-- Not connected -->
+    <div id="org-connect">
+      <div class="flabel" style="margin-bottom:8px">🏢 Join Organisation</div>
+      <div class="org-connect-card">
+        <div style="font-size:11px;color:var(--t2);line-height:1.55;margin-bottom:10px">
+          Enter the code from your admin to sync team policies and announcements.
+        </div>
+        <input class="org-code-inp" id="org-code-inp" type="text" placeholder="Enter org code" maxlength="8" autocomplete="off">
+        <button class="btn-add" id="btn-join-org" style="width:100%">Join Organisation</button>
+        <div class="org-err" id="org-connect-error"></div>
+      </div>
+    </div>
+
+    <!-- Connected -->
+    <div id="org-connected" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div class="flabel">🔒 Admin-Blocked Sites</div>
+        <div style="font-size:10px;font-weight:600;padding:2px 8px;background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.25);border-radius:12px;color:var(--acc-l)" id="org-name-badge"></div>
+      </div>
+      <div style="font-size:11px;color:var(--t2);margin-bottom:8px;line-height:1.5">
+        These sites are enforced by your admin and blocked at all times.
+      </div>
+      <div class="dlist" id="admin-bl-list"></div>
+      <button class="btn-leave" id="btn-leave-org">Leave organisation</button>
+    </div>
+  </div>
+
+</div><!-- /scroll -->
+<div class="toast" id="toast"></div>
+<script type="module" src="dist/popup.js"></script>
+</body>
+</html>

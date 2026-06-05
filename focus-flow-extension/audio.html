@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Focus Flow Audio</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      width: 260px;
+      background: #0d1117;
+      color: #8b949e;
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 12px;
+      padding: 14px 16px;
+      border-radius: 10px;
+    }
+    .row { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+    .dot { width:8px; height:8px; border-radius:50%; background:#3fb950; box-shadow:0 0 8px rgba(63,185,80,.5); animation:p 2s infinite; flex-shrink:0; }
+    @keyframes p { 0%,100%{opacity:1} 50%{opacity:.4} }
+    .label { color:#e6edf3; font-weight:600; font-size:13px; }
+    .sound-name { color:#818cf8; font-size:12px; }
+    .eq { display:flex; align-items:flex-end; gap:2px; height:14px; margin-left:auto; }
+    .b { width:3px; background:#6366f1; border-radius:2px; animation:eq .5s ease-in-out infinite alternate; }
+    .b:nth-child(1){animation-delay:0s;height:5px}
+    .b:nth-child(2){animation-delay:.12s;height:12px}
+    .b:nth-child(3){animation-delay:.24s;height:8px}
+    .b:nth-child(4){animation-delay:.08s;height:14px}
+    @keyframes eq{from{transform:scaleY(.3)}to{transform:scaleY(1)}}
+    .info { font-size:10px; color:#484f58; line-height:1.5; }
+  </style>
+</head>
+<body>
+  <div class="row">
+    <div class="dot" id="dot"></div>
+    <div>
+      <div class="label">Focus Flow Audio</div>
+      <div class="sound-name" id="sname">Loading…</div>
+    </div>
+    <div class="eq" id="eq" style="display:none">
+      <div class="b"></div><div class="b"></div>
+      <div class="b"></div><div class="b"></div>
+    </div>
+  </div>
+  <div class="info">This tab keeps ambient sound playing.<br>You can minimise it — don't close it.</div>
+  <script src="audio.js"></script>
+</body>
+</html>
