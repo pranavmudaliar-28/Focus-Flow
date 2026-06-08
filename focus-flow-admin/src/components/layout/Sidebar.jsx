@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Shield, Bell, Users, BarChart3, Zap, LogOut, CreditCard, Settings } from 'lucide-react'
+import { LayoutDashboard, Shield, Bell, Users, BarChart3, Clock, Zap, LogOut, CreditCard, Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { auth, signOut } from '@/lib/firebase'
 import { useAuth } from '@/hooks/useAuth'
@@ -12,6 +12,7 @@ const ADMIN_NAV = [
   { to: '/announcements', icon: Bell, label: 'Announcements' },
   { to: '/team', icon: Users, label: 'Team' },
   { to: '/analytics', icon: BarChart3, label: 'Analytics' },
+  { to: '/attendance', icon: Clock, label: 'Attendance' },
 ]
 
 const MANAGER_NAV = [
@@ -19,6 +20,7 @@ const MANAGER_NAV = [
   { to: '/announcements', icon: Bell, label: 'Announcements' },
   { to: '/team', icon: Users, label: 'Team' },
   { to: '/analytics', icon: BarChart3, label: 'Analytics' },
+  { to: '/attendance', icon: Clock, label: 'Attendance' },
 ]
 
 const ADMIN_BOTTOM = [

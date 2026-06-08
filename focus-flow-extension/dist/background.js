@@ -19723,6 +19723,12 @@ var require_background = __commonJS({
       if (area !== "local") return;
       if (changes.orgId) {
         setupOrgPolicyListener(changes.orgId.newValue);
+        setupOrgAnnouncementListener(changes.orgId.newValue);
+      }
+      if (changes.firebaseUid) {
+        chrome.storage.local.get(["orgId"], (res) => {
+          setupOrgAnnouncementListener(changes.firebaseUid.newValue && res.orgId ? res.orgId : null);
+        });
       }
       if (changes.orgAdminBlocklist) {
         const newBlocklist = changes.orgAdminBlocklist.newValue || [];
@@ -19743,25 +19749,67 @@ var require_background = __commonJS({
         });
       }
     });
-    chrome.storage.local.get(["orgId"], (res) => {
+    chrome.storage.local.get(["orgId", "firebaseUid"], (res) => {
       if (res.orgId) setupOrgPolicyListener(res.orgId);
+      if (res.orgId && res.firebaseUid) setupOrgAnnouncementListener(res.orgId);
     });
-    async function showAnnouncementNotification(message, orgName, annId) {
+    var ANN_PRIORITIES = {
+      information: { icon: "\u{1F4E2}", dismissible: true, rank: 0 },
+      important: { icon: "\u26A0\uFE0F", dismissible: true, rank: 1 },
+      critical: { icon: "\u{1F6D1}", dismissible: false, rank: 2 },
+      emergency: { icon: "\u{1F6A8}", dismissible: false, rank: 3 }
+    };
+    var OFFSCREEN_PAGE = "offscreen.html";
+    var _creatingOffscreen = null;
+    async function ensureOffscreen() {
+      if (await chrome.offscreen.hasDocument()) return;
+      if (_creatingOffscreen) {
+        await _creatingOffscreen;
+        return;
+      }
+      _creatingOffscreen = chrome.offscreen.createDocument({
+        url: OFFSCREEN_PAGE,
+        reasons: ["AUDIO_PLAYBACK"],
+        justification: "Play announcement alert sounds and keep the real-time announcement connection alive while the popup is closed."
+      });
       try {
-        const { settings, unreadAnnouncements = 0 } = await chrome.storage.local.get(["settings", "unreadAnnouncements"]);
+        await _creatingOffscreen;
+      } catch (e) {
+        if (!String(e).includes("single offscreen")) console.warn("[FF] offscreen:", e);
+      } finally {
+        _creatingOffscreen = null;
+      }
+    }
+    async function playAnnouncementSound(priority) {
+      try {
+        await ensureOffscreen();
+        chrome.runtime.sendMessage({ target: "offscreen", type: "PLAY_ANNOUNCEMENT_SOUND", priority }).catch(() => {
+        });
+      } catch (e) {
+        console.warn("[FF] playAnnouncementSound:", e);
+      }
+    }
+    async function addNotifiedId(id) {
+      if (!id) return;
+      const { notifiedAnnIds = [] } = await chrome.storage.local.get(["notifiedAnnIds"]);
+      if (!notifiedAnnIds.includes(id)) {
+        notifiedAnnIds.push(id);
+        await chrome.storage.local.set({ notifiedAnnIds });
+      }
+    }
+    async function showAnnouncementNotification(message, orgName, annId, priority) {
+      try {
+        const { settings } = await chrome.storage.local.get(["settings"]);
         if (settings?.notificationsEnabled === false) return;
-        chrome.notifications.create(`ann_${Date.now()}`, {
+        const meta = ANN_PRIORITIES[priority] || ANN_PRIORITIES.information;
+        chrome.notifications.create(`ann_${annId}_${Date.now()}`, {
           type: "basic",
           iconUrl: chrome.runtime.getURL("icons/icon48.png"),
-          title: `\u{1F4E2} ${orgName || "Team"} announcement`,
+          title: `${meta.icon} ${orgName || "Team"} announcement`,
           message,
           priority: 2,
-          requireInteraction: true
+          requireInteraction: !meta.dismissible
         });
-        const count = unreadAnnouncements + 1;
-        await chrome.storage.local.set({ unreadAnnouncements: count, lastNotifiedAnnId: annId });
-        chrome.action.setBadgeText({ text: String(count) });
-        chrome.action.setBadgeBackgroundColor({ color: "#6366f1" });
       } catch (e) {
         console.warn("[FF] showAnnouncementNotification:", e);
       }
@@ -19769,24 +19817,49 @@ var require_background = __commonJS({
     chrome.runtime.onStartup.addListener(() => {
       chrome.alarms.create("checkOrgAnnouncements", { periodInMinutes: 1 });
     });
-    async function checkAnnouncements() {
-      try {
-        const { orgId, firebaseIdToken, lastNotifiedAnnId, orgName } = await chrome.storage.local.get(["orgId", "firebaseIdToken", "lastNotifiedAnnId", "orgName"]);
-        if (!orgId || !firebaseIdToken) return;
-        const url = `https://firestore.googleapis.com/v1/projects/focus-flow-7e11e/databases/(default)/documents/organisations/${orgId}/announcements`;
-        const resp = await fetch(url, { headers: { Authorization: `Bearer ${firebaseIdToken}` } });
-        if (!resp.ok) return;
-        const { documents = [] } = await resp.json();
-        const active = documents.find((d) => d.fields?.active?.booleanValue === true);
-        if (!active) return;
-        const annId = active.name.split("/").pop();
-        const message = active.fields?.message?.stringValue;
-        if (annId !== lastNotifiedAnnId && message) {
-          await showAnnouncementNotification(message, orgName, annId);
+    async function processActiveAnnouncements(active, orgName) {
+      const {
+        settings,
+        orgId,
+        annSeededOrg,
+        notifiedAnnIds = [],
+        seenAnnIds = [],
+        dismissedAnnIds = []
+      } = await chrome.storage.local.get(
+        ["settings", "orgId", "annSeededOrg", "notifiedAnnIds", "seenAnnIds", "dismissedAnnIds"]
+      );
+      const fresh = active.filter((a) => !notifiedAnnIds.includes(a.id) && !dismissedAnnIds.includes(a.id));
+      const notified = [...notifiedAnnIds, ...fresh.map((a) => a.id)];
+      if (annSeededOrg !== (orgId || null)) {
+        await chrome.storage.local.set({ notifiedAnnIds: notified, annSeededOrg: orgId || null });
+      } else {
+        for (const a of fresh) {
+          await showAnnouncementNotification(a.message, orgName, a.id, a.priority);
+          if (settings?.announcementSoundEnabled !== false) playAnnouncementSound(a.priority);
         }
-      } catch (e) {
-        console.warn("[FF] checkAnnouncements:", e);
+        if (fresh.length) await chrome.storage.local.set({ notifiedAnnIds: notified });
       }
+      const unread = active.filter(
+        (a) => !seenAnnIds.includes(a.id) && !dismissedAnnIds.includes(a.id)
+      ).length;
+      await chrome.storage.local.set({ unreadAnnouncements: unread });
+      if (unread > 0) {
+        chrome.action.setBadgeText({ text: String(unread) });
+        chrome.action.setBadgeBackgroundColor({ color: "#6366f1" });
+      } else {
+        chrome.action.setBadgeText({ text: "" });
+      }
+    }
+    async function setupOrgAnnouncementListener(orgId) {
+      if (!orgId) {
+        chrome.action.setBadgeText({ text: "" });
+        chrome.runtime.sendMessage({ target: "offscreen", type: "START_ANN_LISTENER", orgId: null }).catch(() => {
+        });
+        return;
+      }
+      await ensureOffscreen();
+      chrome.runtime.sendMessage({ target: "offscreen", type: "START_ANN_LISTENER", orgId }).catch(() => {
+      });
     }
     chrome.runtime.onInstalled.addListener(async (details) => {
       if (details.reason === "install") {
@@ -19806,7 +19879,7 @@ var require_background = __commonJS({
           "sound"
         ]);
         const d = {};
-        if (!stored.settings) d.settings = { defaultDuration: 25, notificationsEnabled: true };
+        if (!stored.settings) d.settings = { defaultDuration: 25, notificationsEnabled: true, announcementSoundEnabled: true };
         if (!stored.history) d.history = [];
         if (!stored.streaks) d.streaks = { current: 0, best: 0, lastDate: null };
         if (!stored.sound) d.sound = { id: null, volume: 0.6 };
@@ -19892,7 +19965,33 @@ var require_background = __commonJS({
               sendResponse({ ok: true });
               break;
             case "ANNOUNCE_NOTIFICATION":
-              await showAnnouncementNotification(msg.message, msg.orgName, msg.annId);
+              await showAnnouncementNotification(msg.message, msg.orgName, msg.annId, msg.priority);
+              await addNotifiedId(msg.annId);
+              sendResponse({ ok: true });
+              break;
+            // Offscreen doc just loaded — it can't read chrome.storage, so reply with
+            // the org it should watch.
+            case "OFFSCREEN_READY": {
+              const { orgId, firebaseUid } = await chrome.storage.local.get(["orgId", "firebaseUid"]);
+              chrome.runtime.sendMessage({
+                target: "offscreen",
+                type: "START_ANN_LISTENER",
+                orgId: orgId && firebaseUid ? orgId : null
+              }).catch(() => {
+              });
+              sendResponse({ ok: true });
+              break;
+            }
+            // Real-time snapshot forwarded by the offscreen listener (popup closed).
+            case "ANNOUNCEMENTS_SNAPSHOT": {
+              const { orgName } = await chrome.storage.local.get(["orgName"]);
+              await processActiveAnnouncements(Array.isArray(msg.active) ? msg.active : [], orgName);
+              sendResponse({ ok: true });
+              break;
+            }
+            // Settings "Test sound" button (plays regardless of the toggle).
+            case "PLAY_ANNOUNCEMENT_SOUND":
+              await playAnnouncementSound(msg.priority || "information");
               sendResponse({ ok: true });
               break;
             case "UPDATE_ORG_BLOCKLIST":
@@ -20017,7 +20116,9 @@ var require_background = __commonJS({
     }
     chrome.alarms.onAlarm.addListener((alarm) => {
       if (alarm.name === "focusEnd") stopFocusSession(true);
-      if (alarm.name === "checkOrgAnnouncements") checkAnnouncements();
+      if (alarm.name === "checkOrgAnnouncements") {
+        chrome.storage.local.get(["orgId", "firebaseUid"], (res) => setupOrgAnnouncementListener(res.orgId && res.firebaseUid ? res.orgId : null));
+      }
     });
     chrome.webNavigation.onBeforeNavigate.addListener(async (details) => {
       if (details.frameId !== 0) return;

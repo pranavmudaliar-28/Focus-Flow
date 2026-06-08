@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Bell, Plus, Loader2, Trash2, ToggleLeft, ToggleRight } from 'lucide-react'
+import { Bell, Plus, Loader2, Trash2, ToggleLeft, ToggleRight, Info, AlertTriangle, AlertOctagon, Siren } from 'lucide-react'
 import { db, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, serverTimestamp, orderBy, query } from '@/lib/firebase'
 import { useAuth } from '@/hooks/useAuth'
 import { toast } from 'sonner'
@@ -12,7 +12,45 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
   DialogDescription, DialogFooter,
 } from '@/components/ui/dialog'
+import {
+  Select, SelectTrigger, SelectContent, SelectItem, SelectValue,
+} from '@/components/ui/select'
 import { formatDate } from '@/lib/utils'
+
+// Priority levels — Critical & Emergency are non-dismissible in the extension
+// (members must acknowledge before the banner clears).
+const PRIORITIES = {
+  information: {
+    label: 'Information',
+    icon: Info,
+    badge: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
+    border: 'border-l-blue-500/60',
+    dismissible: true,
+  },
+  important: {
+    label: 'Important',
+    icon: AlertTriangle,
+    badge: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
+    border: 'border-l-amber-500/60',
+    dismissible: true,
+  },
+  critical: {
+    label: 'Critical',
+    icon: AlertOctagon,
+    badge: 'bg-orange-500/15 text-orange-400 border-orange-500/30',
+    border: 'border-l-orange-500/70',
+    dismissible: false,
+  },
+  emergency: {
+    label: 'Emergency',
+    icon: Siren,
+    badge: 'bg-red-500/15 text-red-400 border-red-500/40',
+    border: 'border-l-red-500/80',
+    dismissible: false,
+  },
+}
+const PRIORITY_ORDER = ['information', 'important', 'critical', 'emergency']
+const getPriority = (p) => PRIORITIES[p] || PRIORITIES.information
 
 export default function Announcements() {
   const { org } = useAuth()
@@ -20,6 +58,7 @@ export default function Announcements() {
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState(false)
   const [message, setMessage] = useState('')
+  const [priority, setPriority] = useState('information')
   const [saving, setSaving] = useState(false)
 
   async function load() {
@@ -39,12 +78,14 @@ export default function Announcements() {
     try {
       await addDoc(collection(db, 'organisations', org.id, 'announcements'), {
         message: message.trim(),
+        priority,
         active: true,
         target: 'all',
         createdAt: serverTimestamp(),
       })
       toast.success('Announcement pushed to all members.')
       setMessage('')
+      setPriority('information')
       setOpen(false)
       load()
     } catch {
@@ -112,17 +153,26 @@ export default function Announcements() {
         </Card>
       ) : (
         <div className="space-y-3">
-          {announcements.map((a) => (
-            <Card key={a.id} className={`border-l-4 transition-all hover:shadow-[var(--shadow-md)] ${a.active ? 'border-l-green-500/60 hover:border-l-green-500/80' : 'border-l-border'}`}>
+          {announcements.map((a) => {
+            const p = getPriority(a.priority)
+            const PIcon = p.icon
+            return (
+            <Card key={a.id} className={`border-l-4 transition-all hover:shadow-[var(--shadow-md)] ${a.active ? p.border : 'border-l-border'}`}>
               <CardContent className="p-4">
                 <div className="flex items-start gap-3">
                   <div className={`mt-1 h-2 w-2 rounded-full shrink-0 ${a.active ? 'bg-green-400 shadow-[0_0_6px_rgba(74,222,128,.6)]' : 'bg-muted-foreground/30'}`} />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-foreground">{a.message}</p>
-                    <div className="flex items-center gap-2 mt-1.5">
+                    <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                      <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${p.badge}`}>
+                        <PIcon className="h-3 w-3" /> {p.label}
+                      </span>
                       <Badge variant={a.active ? 'success' : 'secondary'} className="text-xs">
                         {a.active ? 'Active' : 'Inactive'}
                       </Badge>
+                      {!p.dismissible && (
+                        <span className="text-xs text-muted-foreground">Requires acknowledgment</span>
+                      )}
                       <span className="text-xs text-muted-foreground">
                         {formatDate(a.createdAt)}
                       </span>
@@ -154,7 +204,8 @@ export default function Announcements() {
                 </div>
               </CardContent>
             </Card>
-          ))}
+            )
+          })}
         </div>
       )}
 
@@ -168,6 +219,22 @@ export default function Announcements() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
+            <Label htmlFor="priority">Priority</Label>
+            <Select value={priority} onValueChange={setPriority}>
+              <SelectTrigger id="priority">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PRIORITY_ORDER.map((key) => (
+                  <SelectItem key={key} value={key}>{PRIORITIES[key].label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {!getPriority(priority).dismissible && (
+              <p className="text-xs text-amber-400">
+                Members cannot dismiss this — they must acknowledge it before the banner clears.
+              </p>
+            )}
             <Label htmlFor="msg">Message</Label>
             <textarea
               id="msg"

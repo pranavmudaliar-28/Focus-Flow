@@ -4,7 +4,7 @@
   "version": "3.0.0",
   "description": "Deep work timer with ambient sounds, site blocking, streak tracking & team org mode. Block distractions and focus — free for individuals, built for teams.",
   "homepage_url": "https://slasheasy.com",
-  "minimum_chrome_version": "100",
+  "minimum_chrome_version": "116",
   "permissions": [
     "tabs",
     "storage",
@@ -13,7 +13,8 @@
     "activeTab",
     "scripting",
     "webNavigation",
-    "identity"
+    "identity",
+    "offscreen"
   ],
   "host_permissions": [
     "<all_urls>"

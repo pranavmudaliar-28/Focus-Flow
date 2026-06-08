@@ -38,6 +38,91 @@ function safeSend(msg, cb) {
 }
 
 /* ══════════════════════════════════════════════════════════
+   ANNOUNCEMENTS
+══════════════════════════════════════════════════════════ */
+// Critical & Emergency are non-dismissible — the user must acknowledge them.
+const ANN_PRIORITIES = {
+  information: { icon: '📢', dismissible: true,  rank: 0 },
+  important:   { icon: '⚠️', dismissible: true,  rank: 1 },
+  critical:    { icon: '🛑', dismissible: false, rank: 2 },
+  emergency:   { icon: '🚨', dismissible: false, rank: 3 },
+};
+const annMeta = (p) => ANN_PRIORITIES[p] || ANN_PRIORITIES.information;
+
+async function getIdSet(key) {
+  const res = await chrome.storage.local.get([key]);
+  return Array.isArray(res[key]) ? res[key] : [];
+}
+async function addIdToSet(key, id) {
+  const arr = await getIdSet(key);
+  if (!arr.includes(id)) { arr.push(id); await chrome.storage.local.set({ [key]: arr }); }
+}
+
+// items: [{ id, message, priority }] — rebuilds the stacked banner list.
+async function renderAnnouncements(items) {
+  const list = g('announcement-list');
+  if (!list) return;
+
+  const dismissed = await getIdSet('dismissedAnnIds');
+  const visible = items
+    .filter((it) => it && it.id && it.message && !dismissed.includes(it.id))
+    .sort((a, b) => annMeta(b.priority).rank - annMeta(a.priority).rank);
+
+  list.innerHTML = '';
+  for (const it of visible) {
+    const meta  = annMeta(it.priority);
+    const level = ANN_PRIORITIES[it.priority] ? it.priority : 'information';
+
+    const row = document.createElement('div');
+    row.className = `ann p-${level}`;
+    row.dataset.annId = it.id;
+
+    const ico = document.createElement('span');
+    ico.className = 'ann-ico';
+    ico.textContent = meta.icon;
+
+    const msg = document.createElement('span');
+    msg.className = 'ann-msg';
+    msg.textContent = it.message;
+
+    row.appendChild(ico);
+    row.appendChild(msg);
+
+    const btn = document.createElement('button');
+    if (meta.dismissible) {
+      btn.className = 'ann-act ann-x';
+      btn.title = 'Dismiss';
+      btn.textContent = '×';
+    } else {
+      btn.className = 'ann-act ann-ack';
+      btn.title = 'Acknowledge to dismiss';
+      btn.textContent = 'Acknowledge';
+    }
+    btn.addEventListener('click', () => dismissAnnouncement(it.id, row));
+    row.appendChild(btn);
+
+    list.appendChild(row);
+  }
+
+  // Everything visible in the popup counts as "seen" — drives the unread badge.
+  for (const it of visible) await addIdToSet('seenAnnIds', it.id);
+  clearBadge();
+}
+
+async function dismissAnnouncement(id, node) {
+  await addIdToSet('dismissedAnnIds', id);
+  if (node?.parentNode) node.parentNode.removeChild(node);
+  clearBadge();
+}
+
+// Popup is open → user is actively viewing, so the unread badge is cleared.
+// The background poll recomputes the real unread count once the popup closes.
+function clearBadge() {
+  if (chrome.action) chrome.action.setBadgeText({ text: '' });
+  chrome.storage.local.set({ unreadAnnouncements: 0 });
+}
+
+/* ══════════════════════════════════════════════════════════
    INIT & AUTH
 ══════════════════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', async () => {
@@ -51,9 +136,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   onAuthStateChanged(auth, async (user) => {
     if (user) {
-      g('auth-overlay').style.display = 'none';
-      g('user-info-bar').style.display = 'flex';
-      g('user-email-display').textContent = user.email || 'User';
+      setDisp('auth-overlay', 'none');
+      setDisp('user-info-bar', 'flex');
+      const emailEl = g('user-email-display'); if (emailEl) emailEl.textContent = user.email || 'User';
 
       // Store Firebase ID token so background.js can call Firestore REST API
       try {
@@ -61,13 +146,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         chrome.storage.local.set({ firebaseIdToken: token, firebaseUid: user.uid });
       } catch(_) {}
 
-      startCloudSync();
-
-      // Restore org connection from local storage
+      // Restore org connection from local storage BEFORE starting global sync, so the
+      // global announcement listener's `if (orgState.orgId) return` guard is reliable
+      // and never clobbers org announcements with an empty render.
       const stored = await chrome.storage.local.get(['orgId', 'orgName']);
       if (stored.orgId) {
         orgState.orgId  = stored.orgId;
         orgState.orgName = stored.orgName;
+      }
+
+      startCloudSync();
+
+      if (stored.orgId) {
         startOrgSync(stored.orgId);
       }
 
@@ -77,11 +167,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       initSounds();
       initBlock();
       initOrgConnect();
+      initSettings();
       renderOrgUI();
+      initAttendance();
     } else {
-      g('auth-overlay').style.display = 'flex';
-      g('user-info-bar').style.display = 'none';
-      g('org-badge').style.display = 'none';
+      setDisp('auth-overlay', 'flex');
+      setDisp('user-info-bar', 'none');
+      setDisp('org-badge', 'none');
       chrome.storage.local.remove(['firebaseIdToken', 'firebaseUid']);
     }
   });
@@ -95,6 +187,10 @@ function initAuthUI() {
   const errBox    = g('auth-error');
   const loader    = g('auth-loader');
   const pwdToggle = g('auth-pwd-toggle');
+
+  // Null-safe UI helpers — guard against any missing element (avoids null .style crashes).
+  const setLoader = (on) => { if (loader) loader.style.display = on ? 'block' : 'none'; };
+  const hideErr   = () => { if (errBox) errBox.style.display = 'none'; };
 
   if (pwdToggle) {
     pwdToggle.addEventListener('click', (e) => {
@@ -115,7 +211,7 @@ function initAuthUI() {
     g('auth-mode-title').textContent = isSignupMode ? 'Sign Up' : 'Log In';
     btnAction.textContent = isSignupMode ? 'Sign Up' : 'Log In';
     btnToggle.textContent = isSignupMode ? 'Already have an account? Log In' : 'Need an account? Sign Up';
-    errBox.style.display = 'none';
+    hideErr();
   });
 
   btnLogout.addEventListener('click', () => { signOut(auth); });
@@ -124,8 +220,8 @@ function initAuthUI() {
     const email = g('auth-email').value.trim();
     const pwd   = g('auth-pwd').value;
     if (!email || !pwd) return showError('Please fill in both fields');
-    loader.style.display = 'block';
-    errBox.style.display = 'none';
+    setLoader(true);
+    hideErr();
     try {
       if (isSignupMode) {
         await createUserWithEmailAndPassword(auth, email, pwd);
@@ -133,30 +229,31 @@ function initAuthUI() {
         await signInWithEmailAndPassword(auth, email, pwd);
       }
     } catch(e) { showError(e.message); }
-    finally { loader.style.display = 'none'; }
+    finally { setLoader(false); }
   });
 
   btnGoogle.addEventListener('click', async () => {
-    loader.style.display = 'block';
-    errBox.style.display = 'none';
+    setLoader(true);
+    hideErr();
     try {
       chrome.identity.getAuthToken({ interactive: true }, async (token) => {
         if (chrome.runtime.lastError || !token) {
-          loader.style.display = 'none';
+          setLoader(false);
           return showError(chrome.runtime.lastError?.message || 'Google Auth failed');
         }
         try {
           const credential = GoogleAuthProvider.credential(null, token);
           await signInWithCredential(auth, credential);
         } catch(e) { showError(e.message); }
-        finally { loader.style.display = 'none'; }
+        finally { setLoader(false); }
       });
-    } catch(e) { showError(e.message); loader.style.display = 'none'; }
+    } catch(e) { showError(e.message); setLoader(false); }
   });
 }
 
 function showError(msg) {
   const el = g('auth-error');
+  if (!el) return;
   el.textContent = msg;
   el.style.display = 'block';
 }
@@ -175,22 +272,23 @@ function stopCloudSync() {
 function startCloudSync() {
   stopCloudSync(); // Clean up any existing listeners before attaching new ones
 
-  const unsubAnn = onSnapshot(doc(db, 'global_settings', 'announcements'), (snap) => {
-    if (orgState.orgId) return;
-    const bar = g('announcement-bar');
-    const txt = g('announcement-text');
-    if (!bar || !txt) return;
+  const unsubAnn = onSnapshot(doc(db, 'global_settings', 'announcements'), async (snap) => {
+    if (orgState.orgId) return; // org announcements take over for org members
     if (snap.exists()) {
       const d = snap.data();
       if (d.active && d.message) {
-        bar.style.display = 'block';
-        txt.textContent = d.message;
-      } else {
-        bar.style.display = 'none';
+        // Route the single global announcement through the shared renderer so it
+        // gets the dismiss button too. ID embeds the message so a changed message
+        // re-appears after a prior dismissal.
+        await renderAnnouncements([{
+          id: `global:${d.message}`,
+          message: d.message,
+          priority: d.priority || 'information',
+        }]);
+        return;
       }
-    } else {
-      bar.style.display = 'none';
     }
+    await renderAnnouncements([]);
   }, () => {});
 
   const unsubBl = onSnapshot(doc(db, 'global_settings', 'blocklist'), (snap) => {
@@ -228,25 +326,11 @@ function startOrgSync(orgId) {
       where('active', '==', true)
     ),
     async (snap) => {
-      if (!snap.empty) {
-        const latest = snap.docs[0];
-        g('announcement-bar').style.display = 'block';
-        g('announcement-text').textContent = latest.data().message;
-
-        // Notify background directly — same pattern as START_FOCUS / PLAY_SOUND
-        const { lastNotifiedAnnId } = await chrome.storage.local.get(['lastNotifiedAnnId']);
-        if (latest.id !== lastNotifiedAnnId) {
-          chrome.storage.local.set({ lastNotifiedAnnId: latest.id });
-          safeSend({
-            type:    'ANNOUNCE_NOTIFICATION',
-            message: latest.data().message,
-            orgName: orgState.orgName,
-            annId:   latest.id,
-          });
-        }
-      } else if (!orgState._hasGlobalAnn) {
-        g('announcement-bar').style.display = 'none';
-      }
+      // Render ALL active announcements (not just the first), sorted by priority.
+      // OS notifications + badge are owned by the background listener (single source),
+      // so the popup is display-only here — this avoids duplicate notifications.
+      const items = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      await renderAnnouncements(items);
     },
     () => {}
   );
@@ -254,12 +338,11 @@ function startOrgSync(orgId) {
 
 async function connectOrg(code) {
   const errEl = g('org-connect-error');
-  errEl.style.display = 'none';
+  if (errEl) errEl.style.display = 'none';
   try {
     const indexSnap = await getDoc(doc(db, 'orgIndex', code.trim().toUpperCase()));
     if (!indexSnap.exists()) {
-      errEl.textContent = 'Organisation not found. Check the code and try again.';
-      errEl.style.display = 'block';
+      if (errEl) { errEl.textContent = 'Organisation not found. Check the code and try again.'; errEl.style.display = 'block'; }
       return;
     }
     const orgId   = indexSnap.data().orgId;
@@ -296,10 +379,10 @@ async function connectOrg(code) {
     orgState.orgName = orgName;
     startOrgSync(orgId);
     renderOrgUI();
+    initAttendance();
     showToast(`🏢 Joined ${orgName}`);
   } catch(e) {
-    errEl.textContent = 'Failed to join. Please try again.';
-    errEl.style.display = 'block';
+    if (errEl) { errEl.textContent = 'Failed to join. Please try again.'; errEl.style.display = 'block'; }
     console.warn('[popup] connectOrg:', e);
   }
 }
@@ -310,17 +393,144 @@ function renderOrgUI() {
   const connectForm = g('org-connect');
 
   if (orgState.orgId) {
-    badge.style.display = 'flex';
+    if (badge) badge.style.display = 'flex';
     if (g('org-badge-name')) g('org-badge-name').textContent = orgState.orgName;
     if (connected)   connected.style.display   = 'block';
     if (connectForm) connectForm.style.display  = 'none';
     if (g('org-name-badge')) g('org-name-badge').textContent = orgState.orgName;
     renderAdminBlocklist();
   } else {
-    badge.style.display = 'none';
+    if (badge) badge.style.display = 'none';
     if (connected)   connected.style.display   = 'none';
     if (connectForm) connectForm.style.display  = 'block';
   }
+}
+
+/* ══════════════════════════════════════════════════════════
+   ATTENDANCE — Check In / Check Out (one record per day)
+   Mirrors the session-sync write pattern: a member writes their
+   own day-record to organisations/{orgId}/attendance, staff read.
+══════════════════════════════════════════════════════════ */
+let attendBound = false;
+
+// Local-time calendar day → 'YYYY-MM-DD' (doc id + queryable field).
+function localDateStr(d = new Date()) {
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
+// Handles both Firestore Timestamps (read) and Date objects (just written).
+function fmtAttendTime(t) {
+  if (!t) return '';
+  const d = t.toDate ? t.toDate() : new Date(t);
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function attendRef() {
+  const user = auth.currentUser;
+  if (!user || !orgState.orgId) return null;
+  return doc(db, 'organisations', orgState.orgId, 'attendance', `${user.uid}_${localDateStr()}`);
+}
+
+function renderAttend(data) {
+  const status = g('attend-status');
+  const txt    = g('attend-status-txt');
+  const btnIn  = g('btn-check-in');
+  const btnOut = g('btn-check-out');
+  if (!status || !txt || !btnIn || !btnOut) return;
+
+  status.classList.remove('in', 'done');
+
+  if (!data || !data.checkInTime) {
+    txt.textContent = 'Not checked in today';
+    btnIn.style.display = '';
+    btnIn.disabled = false;
+    btnOut.style.display = 'none';
+  } else if (!data.checkOutTime) {
+    status.classList.add('in');
+    txt.textContent = `Checked in ${fmtAttendTime(data.checkInTime)}`;
+    btnIn.style.display = 'none';
+    btnOut.style.display = '';
+    btnOut.disabled = false;
+  } else {
+    status.classList.add('done');
+    txt.textContent = `In ${fmtAttendTime(data.checkInTime)} · Out ${fmtAttendTime(data.checkOutTime)}`;
+    btnIn.style.display = 'none';
+    btnOut.style.display = 'none';
+  }
+}
+
+async function loadAttend() {
+  const ref = attendRef();
+  if (!ref) return;
+  try {
+    const snap = await getDoc(ref);
+    renderAttend(snap.exists() ? snap.data() : null);
+  } catch (e) { console.warn('[attendance] load', e?.code, e?.message); }
+}
+
+async function checkIn() {
+  const ref  = attendRef();
+  const user = auth.currentUser;
+  if (!ref || !user) return;
+  const btn = g('btn-check-in');
+  if (btn) btn.disabled = true;
+  try {
+    await setDoc(ref, {
+      userId:      user.uid,
+      userEmail:   user.email,
+      userName:    user.displayName || user.email,
+      date:        localDateStr(),
+      checkInTime: new Date(),
+      createdAt:   serverTimestamp(),
+    }, { merge: true });
+    showToast('✓ Checked in');
+    await loadAttend();
+  } catch (e) {
+    console.warn('[attendance] check-in', e?.code, e?.message);
+    if (btn) btn.disabled = false;
+    showToast('Check-in failed');
+  }
+}
+
+async function checkOut() {
+  const ref = attendRef();
+  if (!ref) return;
+  const btn = g('btn-check-out');
+  if (btn) btn.disabled = true;
+  try {
+    await setDoc(ref, {
+      checkOutTime: new Date(),
+      updatedAt:    serverTimestamp(),
+    }, { merge: true });
+    showToast('✓ Checked out');
+    await loadAttend();
+  } catch (e) {
+    console.warn('[attendance] check-out', e?.code, e?.message);
+    if (btn) btn.disabled = false;
+    showToast('Check-out failed');
+  }
+}
+
+function initAttendance() {
+  const card = g('attend-card');
+  if (!card) return;
+
+  // Attendance requires an org connection — hide otherwise.
+  if (!orgState.orgId || !auth.currentUser) {
+    card.style.display = 'none';
+    return;
+  }
+  card.style.display = 'flex';
+
+  if (!attendBound) {
+    g('btn-check-in')?.addEventListener('click', checkIn);
+    g('btn-check-out')?.addEventListener('click', checkOut);
+    attendBound = true;
+  }
+
+  loadAttend();
 }
 
 function renderAdminBlocklist() {
@@ -356,8 +566,7 @@ function initOrgConnect() {
     const code = (inp?.value || '').trim();
     if (!code) {
       const err = g('org-connect-error');
-      err.textContent = 'Enter your organisation code.';
-      err.style.display = 'block';
+      if (err) { err.textContent = 'Enter your organisation code.'; err.style.display = 'block'; }
       return;
     }
     connectOrg(code);
@@ -366,6 +575,7 @@ function initOrgConnect() {
     await chrome.storage.local.remove(['orgId', 'orgName', 'orgAdminBlocklist']);
     orgState = { orgId: null, orgName: null, adminBlocklist: [] };
     renderOrgUI();
+    initAttendance();
     showToast('Left organisation');
   });
 }
@@ -428,6 +638,8 @@ function renderAll() {
 }
 
 function g(id) { return document.getElementById(id); }
+// Null-safe display setter — never throws if the element is missing.
+function setDisp(id, value) { const el = g(id); if (el) el.style.display = value; }
 
 /* ══════════════════════════════════════════════════════════
    SOUND UI RESTORE
@@ -469,6 +681,38 @@ function initNav() {
 }
 
 /* ══════════════════════════════════════════════════════════
+   SETTINGS
+══════════════════════════════════════════════════════════ */
+function initSettings() {
+  const notif    = g('set-notif');
+  const annSound = g('set-ann-sound');
+  const testBtn  = g('btn-test-sound');
+
+  // Load current settings into the toggles (missing field => enabled by default).
+  chrome.storage.local.get(['settings'], (res) => {
+    const s = res.settings || {};
+    if (notif)    notif.checked    = s.notificationsEnabled    !== false;
+    if (annSound) annSound.checked = s.announcementSoundEnabled !== false;
+  });
+
+  // Merge + persist a single setting (background reads `settings` fresh each time).
+  const save = (key, val) => {
+    chrome.storage.local.get(['settings'], (res) => {
+      const s = res.settings || {};
+      s[key] = val;
+      chrome.storage.local.set({ settings: s });
+    });
+  };
+
+  notif?.addEventListener('change', () => save('notificationsEnabled', notif.checked));
+  annSound?.addEventListener('change', () => save('announcementSoundEnabled', annSound.checked));
+  testBtn?.addEventListener('click', () => {
+    safeSend({ type: 'PLAY_ANNOUNCEMENT_SOUND', priority: 'information' });
+    showToast('🔔 Test sound');
+  });
+}
+
+/* ══════════════════════════════════════════════════════════
    TIMER
 ══════════════════════════════════════════════════════════ */
 function initTimer() {
@@ -503,9 +747,9 @@ function initTimer() {
 }
 
 function showIdle() {
-  g('setup-form').style.display  = 'flex';
-  g('active-ctrl').style.display = 'none';
-  g('prog-wrap').style.display   = 'none';
+  setDisp('setup-form', 'flex');
+  setDisp('active-ctrl', 'none');
+  setDisp('prog-wrap', 'none');
   g('sbadge')?.classList.remove('run');
   const bt = g('sbadge-txt'); if (bt) bt.textContent = 'No active session';
   const lbl = g('t-lbl'); if (lbl) { lbl.textContent = 'READY'; lbl.classList.remove('run'); }
@@ -513,9 +757,9 @@ function showIdle() {
 }
 
 function showActive(fs) {
-  g('setup-form').style.display  = 'none';
-  g('active-ctrl').style.display = 'block';
-  g('prog-wrap').style.display   = 'block';
+  setDisp('setup-form', 'none');
+  setDisp('active-ctrl', 'block');
+  setDisp('prog-wrap', 'block');
   g('sbadge')?.classList.add('run');
   const bt = g('sbadge-txt'); if (bt) bt.textContent = fs.sessionName || 'Deep Work';
   const lbl = g('t-lbl'); if (lbl) { lbl.textContent = 'FOCUSING'; lbl.classList.add('run'); }
@@ -580,7 +824,7 @@ function initSounds() {
       if (card.classList.contains('on')) {
         safeSend({ type:'STOP_SOUND' }, () => {
           card.classList.remove('on');
-          g('now-play').style.display = 'none';
+          setDisp('now-play', 'none');
           g('mix-box')?.classList.remove('show');
           updateAudioTabBtn(false);
           showToast('⏹ Sound stopped');

@@ -2878,9 +2878,6 @@ function parseDeepLink(url) {
   const iOSDoubleDeepLink = iOSDeepLink ? querystringDecode(extractQuerystring(iOSDeepLink))["link"] : null;
   return iOSDoubleDeepLink || iOSDeepLink || doubleDeepLink || link || url;
 }
-async function signUp(auth2, request) {
-  return _performSignInRequest(auth2, "POST", "/v1/accounts:signUp", _addTidIfNecessary(auth2, request));
-}
 function providerIdForResponse(response) {
   if (response.providerId) {
     return response.providerId;
@@ -2955,56 +2952,6 @@ async function _signInWithCredential(auth2, credential, bypassAuthState = false)
   }
   return userCredential;
 }
-async function signInWithCredential(auth2, credential) {
-  return _signInWithCredential(_castAuth(auth2), credential);
-}
-async function recachePasswordPolicy(auth2) {
-  const authInternal = _castAuth(auth2);
-  if (authInternal._getPasswordPolicyInternal()) {
-    await authInternal._updatePasswordPolicy();
-  }
-}
-async function createUserWithEmailAndPassword(auth2, email, password) {
-  if (_isFirebaseServerApp(auth2.app)) {
-    return Promise.reject(_serverAppCurrentUserOperationNotSupportedError(auth2));
-  }
-  const authInternal = _castAuth(auth2);
-  const request = {
-    returnSecureToken: true,
-    email,
-    password,
-    clientType: "CLIENT_TYPE_WEB"
-    /* RecaptchaClientType.WEB */
-  };
-  const signUpResponse = handleRecaptchaFlow(
-    authInternal,
-    request,
-    "signUpPassword",
-    signUp,
-    "EMAIL_PASSWORD_PROVIDER"
-    /* RecaptchaAuthProvider.EMAIL_PASSWORD_PROVIDER */
-  );
-  const response = await signUpResponse.catch((error) => {
-    if (error.code === `auth/${"password-does-not-meet-requirements"}`) {
-      void recachePasswordPolicy(auth2);
-    }
-    throw error;
-  });
-  const userCredential = await UserCredentialImpl._fromIdTokenResponse(authInternal, "signIn", response);
-  await authInternal._updateCurrentUser(userCredential.user);
-  return userCredential;
-}
-function signInWithEmailAndPassword(auth2, email, password) {
-  if (_isFirebaseServerApp(auth2.app)) {
-    return Promise.reject(_serverAppCurrentUserOperationNotSupportedError(auth2));
-  }
-  return signInWithCredential(getModularInstance(auth2), EmailAuthProvider.credential(email, password)).catch(async (error) => {
-    if (error.code === `auth/${"password-does-not-meet-requirements"}`) {
-      void recachePasswordPolicy(auth2);
-    }
-    throw error;
-  });
-}
 function onIdTokenChanged(auth2, nextOrObserver, error, completed) {
   return getModularInstance(auth2).onIdTokenChanged(nextOrObserver, error, completed);
 }
@@ -3013,9 +2960,6 @@ function beforeAuthStateChanged(auth2, callback, onAbort) {
 }
 function onAuthStateChanged(auth2, nextOrObserver, error, completed) {
   return getModularInstance(auth2).onAuthStateChanged(nextOrObserver, error, completed);
-}
-function signOut(auth2) {
-  return getModularInstance(auth2).signOut();
 }
 function startEnrollPhoneMfa(auth2, request) {
   return _performApiRequest(auth2, "POST", "/v2/accounts/mfaEnrollment:start", _addTidIfNecessary(auth2, request));
@@ -10636,9 +10580,6 @@ function __PRIVATE_validateNonEmptyArgument(e, t, n) {
 function __PRIVATE_validateIsNotUsedTogether(e, t, n, r) {
   if (true === t && true === r) throw new FirestoreError(D.INVALID_ARGUMENT, `${e} and ${n} cannot be used together.`);
 }
-function __PRIVATE_validateDocumentPath(e) {
-  if (!DocumentKey.isDocumentKey(e)) throw new FirestoreError(D.INVALID_ARGUMENT, `Invalid document reference. Document references must have an even number of segments, but ${e} has ${e.length}.`);
-}
 function __PRIVATE_validateCollectionPath(e) {
   if (DocumentKey.isDocumentKey(e)) throw new FirestoreError(D.INVALID_ARGUMENT, `Invalid collection reference. Collection references must have an odd number of segments, but ${e} has ${e.length}.`);
 }
@@ -11098,20 +11039,6 @@ function __PRIVATE_deepClone(e) {
 function __PRIVATE_isMaxValue(e) {
   return (((e.mapValue || {}).fields || {}).__type__ || {}).stringValue === ot;
 }
-function __PRIVATE_extractFieldMask(e) {
-  const t = [];
-  return forEach(e.fields, ((e2, n) => {
-    const r = new FieldPath$1([e2]);
-    if (__PRIVATE_isMapValue(n)) {
-      const e3 = __PRIVATE_extractFieldMask(n.mapValue).fields;
-      if (0 === e3.length)
-        t.push(r);
-      else
-        for (const n2 of e3) t.push(r.child(n2));
-    } else
-      t.push(r);
-  })), new FieldMask(t);
-}
 function __PRIVATE_boundCompareToDocument(e, t, n) {
   let r = 0;
   for (let i = 0; i < e.position.length; i++) {
@@ -11496,14 +11423,6 @@ function __PRIVATE_mutationApplyToLocalView(e, t, n, r) {
     return n2;
   })(e, t, n);
 }
-function __PRIVATE_mutationExtractBaseValue(e, t) {
-  let n = null;
-  for (const r of e.fieldTransforms) {
-    const e2 = t.data.field(r.field), i = __PRIVATE_computeTransformOperationBaseValue(r.transform, e2 || null);
-    null != i && (null === n && (n = ObjectValue.empty()), n.set(r.field, i));
-  }
-  return n || null;
-}
 function __PRIVATE_mutationEquals(e, t) {
   return e.type === t.type && (!!e.key.isEqual(t.key) && (!!e.precondition.isEqual(t.precondition) && (!!(function __PRIVATE_fieldTransformsAreEqual(e2, t2) {
     return void 0 === e2 && void 0 === t2 || !(!e2 || !t2) && __PRIVATE_arrayEquals(e2, t2, ((e3, t3) => __PRIVATE_fieldTransformEquals(e3, t3)));
@@ -11537,39 +11456,6 @@ function __PRIVATE_localTransformResults(e, t, n) {
     r.set(i.field, __PRIVATE_applyTransformOperationToLocalView(e2, s, t));
   }
   return r;
-}
-function __PRIVATE_isPermanentError(e) {
-  switch (e) {
-    case D.OK:
-      return fail(64938);
-    case D.CANCELLED:
-    case D.UNKNOWN:
-    case D.DEADLINE_EXCEEDED:
-    case D.RESOURCE_EXHAUSTED:
-    case D.INTERNAL:
-    case D.UNAVAILABLE:
-    // Unauthenticated means something went wrong with our token and we need
-    // to retry with new credentials which will happen automatically.
-    case D.UNAUTHENTICATED:
-      return false;
-    case D.INVALID_ARGUMENT:
-    case D.NOT_FOUND:
-    case D.ALREADY_EXISTS:
-    case D.PERMISSION_DENIED:
-    case D.FAILED_PRECONDITION:
-    // Aborted might be retried in some scenarios, but that is dependent on
-    // the context and should handled individually by the calling code.
-    // See https://cloud.google.com/apis/design/errors.
-    case D.ABORTED:
-    case D.OUT_OF_RANGE:
-    case D.UNIMPLEMENTED:
-    case D.DATA_LOSS:
-      return true;
-    default:
-      return fail(15467, {
-        code: e
-      });
-  }
 }
 function __PRIVATE_mapCodeFromRpcCode(e) {
   if (void 0 === e)
@@ -11665,9 +11551,6 @@ function toTimestamp(e, t) {
 function __PRIVATE_toBytes(e, t) {
   return e.useProto3Json ? t.toBase64() : t.toUint8Array();
 }
-function __PRIVATE_toVersion(e, t) {
-  return toTimestamp(e, t.toTimestamp());
-}
 function __PRIVATE_fromVersion(e) {
   return __PRIVATE_hardAssert(!!e, 49232), SnapshotVersion.fromTimestamp((function fromTimestamp(e2) {
     const t = __PRIVATE_normalizeTimestamp(e2);
@@ -11689,9 +11572,6 @@ function __PRIVATE_fromResourceName(e) {
     key: t.toString()
   }), t;
 }
-function __PRIVATE_toName(e, t) {
-  return __PRIVATE_toResourceName(e.databaseId, t.path);
-}
 function fromName(e, t) {
   const n = __PRIVATE_fromResourceName(t);
   if (n.get(1) !== e.databaseId.projectId) throw new FirestoreError(D.INVALID_ARGUMENT, "Tried to deserialize key from different project: " + n.get(1) + " vs " + e.databaseId.projectId);
@@ -11712,12 +11592,6 @@ function __PRIVATE_extractLocalPathFromResourceName(e) {
   return __PRIVATE_hardAssert(e.length > 4 && "documents" === e.get(4), 29091, {
     key: e.toString()
   }), e.popFirst(5);
-}
-function __PRIVATE_toMutationDocument(e, t, n) {
-  return {
-    name: __PRIVATE_toName(e, t),
-    fields: n.value.mapValue.fields
-  };
 }
 function __PRIVATE_fromWatchChange(e, t) {
   let n;
@@ -11773,78 +11647,6 @@ function __PRIVATE_fromWatchChange(e, t) {
     }
   }
   return n;
-}
-function toMutation(e, t) {
-  let n;
-  if (t instanceof __PRIVATE_SetMutation) n = {
-    update: __PRIVATE_toMutationDocument(e, t.key, t.value)
-  };
-  else if (t instanceof __PRIVATE_DeleteMutation) n = {
-    delete: __PRIVATE_toName(e, t.key)
-  };
-  else if (t instanceof __PRIVATE_PatchMutation) n = {
-    update: __PRIVATE_toMutationDocument(e, t.key, t.data),
-    updateMask: __PRIVATE_toDocumentMask(t.fieldMask)
-  };
-  else {
-    if (!(t instanceof __PRIVATE_VerifyMutation)) return fail(16599, {
-      Vt: t.type
-    });
-    n = {
-      verify: __PRIVATE_toName(e, t.key)
-    };
-  }
-  return t.fieldTransforms.length > 0 && (n.updateTransforms = t.fieldTransforms.map(((e2) => (function __PRIVATE_toFieldTransform(e3, t2) {
-    const n2 = t2.transform;
-    if (n2 instanceof __PRIVATE_ServerTimestampTransform) return {
-      fieldPath: t2.field.canonicalString(),
-      setToServerValue: "REQUEST_TIME"
-    };
-    if (n2 instanceof __PRIVATE_ArrayUnionTransformOperation) return {
-      fieldPath: t2.field.canonicalString(),
-      appendMissingElements: {
-        values: n2.elements
-      }
-    };
-    if (n2 instanceof __PRIVATE_ArrayRemoveTransformOperation) return {
-      fieldPath: t2.field.canonicalString(),
-      removeAllFromArray: {
-        values: n2.elements
-      }
-    };
-    if (n2 instanceof __PRIVATE_NumericIncrementTransformOperation) return {
-      fieldPath: t2.field.canonicalString(),
-      increment: n2.Ae
-    };
-    if (n2 instanceof __PRIVATE_NumericMinimumTransformOperation) return {
-      fieldPath: t2.field.canonicalString(),
-      minimum: n2.Ae
-    };
-    if (n2 instanceof __PRIVATE_NumericMaximumTransformOperation) return {
-      fieldPath: t2.field.canonicalString(),
-      maximum: n2.Ae
-    };
-    throw fail(20930, {
-      transform: t2.transform
-    });
-  })(0, e2)))), t.precondition.isNone || (n.currentDocument = (function __PRIVATE_toPrecondition(e2, t2) {
-    return void 0 !== t2.updateTime ? {
-      updateTime: __PRIVATE_toVersion(e2, t2.updateTime)
-    } : void 0 !== t2.exists ? {
-      exists: t2.exists
-    } : fail(27497);
-  })(e, t.precondition)), n;
-}
-function __PRIVATE_fromWriteResults(e, t) {
-  return e && e.length > 0 ? (__PRIVATE_hardAssert(void 0 !== t, 14353), e.map(((e2) => (function __PRIVATE_fromWriteResult(e3, t2) {
-    let n = e3.updateTime ? __PRIVATE_fromVersion(e3.updateTime) : __PRIVATE_fromVersion(t2);
-    return n.isEqual(SnapshotVersion.min()) && // The Firestore Emulator currently returns an update time of 0 for
-    // deletes of non-existing documents (rather than null). This breaks the
-    // test "get deleted doc while offline with source=cache" as NoDocuments
-    // with version 0 are filtered by IndexedDb's RemoteDocumentCache.
-    // TODO(#2149): Remove this when Emulator is fixed
-    (n = __PRIVATE_fromVersion(t2)), new MutationResult(n, e3.transformResults || []);
-  })(e2, t)))) : [];
 }
 function __PRIVATE_toDocumentsTarget(e, t) {
   return {
@@ -12109,12 +11911,6 @@ function __PRIVATE_toFilter(e) {
     filter: e
   });
 }
-function __PRIVATE_toDocumentMask(e) {
-  const t = [];
-  return e.fields.forEach(((e2) => t.push(e2.canonicalString()))), {
-    fieldPaths: t
-  };
-}
 function __PRIVATE_isValidResourceName(e) {
   return e.length >= 4 && "projects" === e.get(0) && "databases" === e.get(2);
 }
@@ -12164,33 +11960,6 @@ async function __PRIVATE_localStoreHandleUserChange(e, t) {
         addedBatchIds: s
       })));
     }));
-  }));
-}
-function __PRIVATE_localStoreAcknowledgeBatch(e, t) {
-  const n = __PRIVATE_debugCast(e);
-  return n.persistence.runTransaction("Acknowledge batch", "readwrite-primary", ((e2) => {
-    const r = t.batch.keys(), i = n.Ms.newChangeBuffer({
-      trackRemovals: true
-    });
-    return (function __PRIVATE_applyWriteToRemoteDocuments(e3, t2, n2, r2) {
-      const i2 = n2.batch, s = i2.keys();
-      let o = PersistencePromise.resolve();
-      return s.forEach(((e4) => {
-        o = o.next((() => r2.getEntry(t2, e4))).next(((t3) => {
-          const s2 = n2.docVersions.get(e4);
-          __PRIVATE_hardAssert(null !== s2, 48541), t3.version.compareTo(s2) < 0 && (i2.applyToRemoteDocument(t3, n2), t3.isValidDocument() && // We use the commitVersion as the readTime rather than the
-          // document's updateTime since the updateTime is not advanced
-          // for updates that do not modify the underlying document.
-          (t3.setReadTime(n2.commitVersion), r2.addEntry(t3)));
-        }));
-      })), o.next((() => e3.mutationQueue.removeMutationBatch(t2, i2)));
-    })(n, e2, t, i).next((() => i.apply(e2))).next((() => n.mutationQueue.performConsistencyCheck(e2))).next((() => n.documentOverlayCache.removeOverlaysForBatchId(e2, r, t.batch.batchId))).next((() => n.localDocuments.recalculateAndSaveOverlaysForDocumentKeys(e2, (function __PRIVATE_getKeysWithTransformResults(e3) {
-      let t2 = __PRIVATE_documentKeySet();
-      for (let n2 = 0; n2 < e3.mutationResults.length; ++n2) {
-        e3.mutationResults[n2].transformResults.length > 0 && (t2 = t2.add(e3.batch.mutations[n2].key));
-      }
-      return t2;
-    })(t)))).next((() => n.localDocuments.getDocuments(e2, r)));
   }));
 }
 function __PRIVATE_localStoreGetLastRemoteSnapshotVersion(e) {
@@ -12267,10 +12036,6 @@ function __PRIVATE_populateDocumentChangeBuffer(e, t, n) {
       Bs: i
     };
   }));
-}
-function __PRIVATE_localStoreGetNextMutationBatch(e, t) {
-  const n = __PRIVATE_debugCast(e);
-  return n.persistence.runTransaction("Get next mutation batch", "readonly", ((e2) => (void 0 === t && (t = q), n.mutationQueue.getNextMutationBatchAfterBatchId(e2, t))));
 }
 function __PRIVATE_localStoreAllocateTarget(e, t) {
   const n = __PRIVATE_debugCast(e);
@@ -12555,66 +12320,6 @@ async function __PRIVATE_disableNetworkUntilRecovery(e, t, n) {
     ), await __PRIVATE_enableNetworkInternal(e);
   }));
 }
-function __PRIVATE_executeWithRecovery(e, t) {
-  return t().catch(((n) => __PRIVATE_disableNetworkUntilRecovery(e, n, t)));
-}
-async function __PRIVATE_fillWritePipeline(e) {
-  const t = __PRIVATE_debugCast(e), n = __PRIVATE_ensureWriteStream(t);
-  let r = t.Pa.length > 0 ? t.Pa[t.Pa.length - 1].batchId : q;
-  for (; __PRIVATE_canAddToWritePipeline(t); ) try {
-    const e2 = await __PRIVATE_localStoreGetNextMutationBatch(t.localStore, r);
-    if (null === e2) {
-      0 === t.Pa.length && n.B_();
-      break;
-    }
-    r = e2.batchId, __PRIVATE_addToWritePipeline(t, e2);
-  } catch (e2) {
-    await __PRIVATE_disableNetworkUntilRecovery(t, e2);
-  }
-  __PRIVATE_shouldStartWriteStream(t) && __PRIVATE_startWriteStream(t);
-}
-function __PRIVATE_canAddToWritePipeline(e) {
-  return __PRIVATE_canUseNetwork(e) && e.Pa.length < 10;
-}
-function __PRIVATE_addToWritePipeline(e, t) {
-  e.Pa.push(t);
-  const n = __PRIVATE_ensureWriteStream(e);
-  n.x_() && n.X_ && n.Y_(t.mutations);
-}
-function __PRIVATE_shouldStartWriteStream(e) {
-  return __PRIVATE_canUseNetwork(e) && !__PRIVATE_ensureWriteStream(e).M_() && e.Pa.length > 0;
-}
-function __PRIVATE_startWriteStream(e) {
-  __PRIVATE_ensureWriteStream(e).start();
-}
-async function __PRIVATE_onWriteStreamOpen(e) {
-  __PRIVATE_ensureWriteStream(e).na();
-}
-async function __PRIVATE_onWriteHandshakeComplete(e) {
-  const t = __PRIVATE_ensureWriteStream(e);
-  for (const n of e.Pa) t.Y_(n.mutations);
-}
-async function __PRIVATE_onMutationResult(e, t, n) {
-  const r = e.Pa.shift(), i = MutationBatchResult.from(r, t, n);
-  await __PRIVATE_executeWithRecovery(e, (() => e.remoteSyncer.applySuccessfulWrite(i))), // It's possible that with the completion of this mutation another
-  // slot has freed up.
-  await __PRIVATE_fillWritePipeline(e);
-}
-async function __PRIVATE_onWriteStreamClose(e, t) {
-  t && __PRIVATE_ensureWriteStream(e).X_ && // This error affects the actual write.
-  await (async function __PRIVATE_handleWriteError(e2, t2) {
-    if ((function __PRIVATE_isPermanentWriteError(e3) {
-      return __PRIVATE_isPermanentError(e3) && e3 !== D.ABORTED;
-    })(t2.code)) {
-      const n = e2.Pa.shift();
-      __PRIVATE_ensureWriteStream(e2).N_(), await __PRIVATE_executeWithRecovery(e2, (() => e2.remoteSyncer.rejectFailedWrite(n.batchId, t2))), // It's possible that with the completion of this mutation
-      // another slot has freed up.
-      await __PRIVATE_fillWritePipeline(e2);
-    }
-  })(e, t), // The write stream might have been started by refilling the write
-  // pipeline for failed writes
-  __PRIVATE_shouldStartWriteStream(e) && __PRIVATE_startWriteStream(e);
-}
 async function __PRIVATE_remoteStoreHandleCredentialChange(e, t) {
   const n = __PRIVATE_debugCast(e);
   n.asyncQueue.verifyOperationInProgress(), __PRIVATE_logDebug(Ht, "RemoteStore received new credentials");
@@ -12660,22 +12365,6 @@ function __PRIVATE_ensureWatchStream(e) {
       /* OnlineState.Unknown */
     )) : (await e.pa.stop(), __PRIVATE_cleanUpWatchStreamState(e));
   }))), e.pa;
-}
-function __PRIVATE_ensureWriteStream(e) {
-  return e.ya || // Create stream (but note that it is not started yet).
-  (e.ya = (function __PRIVATE_newPersistentWriteStream(e2, t, n) {
-    const r = __PRIVATE_debugCast(e2);
-    return r.ia(), new __PRIVATE_PersistentWriteStream(t, r.connection, r.authCredentials, r.appCheckCredentials, r.serializer, n);
-  })(e.datastore, e.asyncQueue, {
-    Ho: () => Promise.resolve(),
-    Xo: __PRIVATE_onWriteStreamOpen.bind(null, e),
-    e_: __PRIVATE_onWriteStreamClose.bind(null, e),
-    ea: __PRIVATE_onWriteHandshakeComplete.bind(null, e),
-    ta: __PRIVATE_onMutationResult.bind(null, e)
-  }), e.da.push((async (t) => {
-    t ? (e.ya.N_(), // This will start the write stream if necessary.
-    await __PRIVATE_fillWritePipeline(e)) : (await e.ya.stop(), e.Pa.length > 0 && (__PRIVATE_logDebug(Ht, `Stopping write stream with ${e.Pa.length} pending writes`), e.Pa = []));
-  }))), e.ya;
 }
 function __PRIVATE_wrapInUserErrorIfRecoverable(e, t) {
   if (__PRIVATE_logError("AsyncQueue", `${t}: ${e}`), __PRIVATE_isIndexedDbTransactionError(e)) return new FirestoreError(D.UNAVAILABLE, `${t}: ${e}`);
@@ -12867,49 +12556,6 @@ async function __PRIVATE_triggerRemoteStoreUnlisten(e, t) {
   // watch target.
   (n.sharedClientState.removeLocalQueryTarget(r.targetId), __PRIVATE_remoteStoreUnlisten(n.remoteStore, r.targetId));
 }
-async function __PRIVATE_syncEngineWrite(e, t, n) {
-  const r = __PRIVATE_syncEngineEnsureWriteCallbacks(e);
-  try {
-    const e2 = await (function __PRIVATE_localStoreWriteLocally(e3, t2) {
-      const n2 = __PRIVATE_debugCast(e3), r2 = Timestamp.now(), i = t2.reduce(((e4, t3) => e4.add(t3.key)), __PRIVATE_documentKeySet());
-      let s, o;
-      return n2.persistence.runTransaction("Locally write mutations", "readwrite", ((e4) => {
-        let _ = __PRIVATE_mutableDocumentMap(), a = __PRIVATE_documentKeySet();
-        return n2.Ms.getEntries(e4, i).next(((e5) => {
-          _ = e5, _.forEach(((e6, t3) => {
-            t3.isValidDocument() || (a = a.add(e6));
-          }));
-        })).next((() => n2.localDocuments.getOverlayedDocuments(e4, _))).next(((i2) => {
-          s = i2;
-          const o2 = [];
-          for (const e5 of t2) {
-            const t3 = __PRIVATE_mutationExtractBaseValue(e5, s.get(e5.key).overlayedDocument);
-            null != t3 && // NOTE: The base state should only be applied if there's some
-            // existing document to override, so use a Precondition of
-            // exists=true
-            o2.push(new __PRIVATE_PatchMutation(e5.key, t3, __PRIVATE_extractFieldMask(t3.value.mapValue), Precondition.exists(true)));
-          }
-          return n2.mutationQueue.addMutationBatch(e4, r2, o2, t2);
-        })).next(((t3) => {
-          o = t3;
-          const r3 = t3.applyToLocalDocumentSet(s, a);
-          return n2.documentOverlayCache.saveOverlays(e4, t3.batchId, r3);
-        }));
-      })).then((() => ({
-        batchId: o.batchId,
-        changes: __PRIVATE_convertOverlayedDocumentMapToDocumentMap(s)
-      })));
-    })(r.localStore, t);
-    r.sharedClientState.addPendingMutation(e2.batchId), (function __PRIVATE_addMutationCallback(e3, t2, n2) {
-      let r2 = e3.gu[e3.currentUser.toKey()];
-      r2 || (r2 = new SortedMap(__PRIVATE_primitiveComparator));
-      r2 = r2.insert(t2, n2), e3.gu[e3.currentUser.toKey()] = r2;
-    })(r, e2.batchId, n), await __PRIVATE_syncEngineEmitNewSnapsAndNotifyLocalStore(r, e2.changes), await __PRIVATE_fillWritePipeline(r.remoteStore);
-  } catch (e2) {
-    const t2 = __PRIVATE_wrapInUserErrorIfRecoverable(e2, "Failed to persist write");
-    n.reject(t2);
-  }
-}
 async function __PRIVATE_syncEngineApplyRemoteEvent(e, t) {
   const n = __PRIVATE_debugCast(e);
   try {
@@ -12970,48 +12616,6 @@ async function __PRIVATE_syncEngineRejectListen(e, t, n) {
     /* keepPersistedTargetData */
     false
   ).then((() => __PRIVATE_removeAndCleanupTarget(r, t, n))).catch(__PRIVATE_ignoreIfPrimaryLeaseLoss);
-}
-async function __PRIVATE_syncEngineApplySuccessfulWrite(e, t) {
-  const n = __PRIVATE_debugCast(e), r = t.batch.batchId;
-  try {
-    const e2 = await __PRIVATE_localStoreAcknowledgeBatch(n.localStore, t);
-    __PRIVATE_processUserCallback(
-      n,
-      r,
-      /*error=*/
-      null
-    ), __PRIVATE_triggerPendingWritesCallbacks(n, r), n.sharedClientState.updateMutationState(r, "acknowledged"), await __PRIVATE_syncEngineEmitNewSnapsAndNotifyLocalStore(n, e2);
-  } catch (e2) {
-    await __PRIVATE_ignoreIfPrimaryLeaseLoss(e2);
-  }
-}
-async function __PRIVATE_syncEngineRejectFailedWrite(e, t, n) {
-  const r = __PRIVATE_debugCast(e);
-  try {
-    const e2 = await (function __PRIVATE_localStoreRejectBatch(e3, t2) {
-      const n2 = __PRIVATE_debugCast(e3);
-      return n2.persistence.runTransaction("Reject batch", "readwrite-primary", ((e4) => {
-        let r2;
-        return n2.mutationQueue.lookupMutationBatch(e4, t2).next(((t3) => (__PRIVATE_hardAssert(null !== t3, 37113), r2 = t3.keys(), n2.mutationQueue.removeMutationBatch(e4, t3)))).next((() => n2.mutationQueue.performConsistencyCheck(e4))).next((() => n2.documentOverlayCache.removeOverlaysForBatchId(e4, r2, t2))).next((() => n2.localDocuments.recalculateAndSaveOverlaysForDocumentKeys(e4, r2))).next((() => n2.localDocuments.getDocuments(e4, r2)));
-      }));
-    })(r.localStore, t);
-    __PRIVATE_processUserCallback(r, t, n), __PRIVATE_triggerPendingWritesCallbacks(r, t), r.sharedClientState.updateMutationState(t, "rejected", n), await __PRIVATE_syncEngineEmitNewSnapsAndNotifyLocalStore(r, e2);
-  } catch (n2) {
-    await __PRIVATE_ignoreIfPrimaryLeaseLoss(n2);
-  }
-}
-function __PRIVATE_triggerPendingWritesCallbacks(e, t) {
-  (e.pu.get(t) || []).forEach(((e2) => {
-    e2.resolve();
-  })), e.pu.delete(t);
-}
-function __PRIVATE_processUserCallback(e, t, n) {
-  const r = __PRIVATE_debugCast(e);
-  let i = r.gu[r.currentUser.toKey()];
-  if (i) {
-    const e2 = i.get(t);
-    e2 && (n ? e2.reject(n) : e2.resolve(), i = i.remove(t)), r.gu[r.currentUser.toKey()] = i;
-  }
 }
 function __PRIVATE_removeAndCleanupTarget(e, t, n = null) {
   e.sharedClientState.removeLocalQueryTarget(t);
@@ -13115,10 +12719,6 @@ function __PRIVATE_ensureWatchCallbacks(e) {
   const t = __PRIVATE_debugCast(e);
   return t.remoteStore.remoteSyncer.applyRemoteEvent = __PRIVATE_syncEngineApplyRemoteEvent.bind(null, t), t.remoteStore.remoteSyncer.getRemoteKeysForTarget = __PRIVATE_syncEngineGetRemoteKeysForTarget.bind(null, t), t.remoteStore.remoteSyncer.rejectListen = __PRIVATE_syncEngineRejectListen.bind(null, t), t.Eu.J_ = __PRIVATE_eventManagerOnWatchChange.bind(null, t.eventManager), t.Eu.bu = __PRIVATE_eventManagerOnWatchError.bind(null, t.eventManager), t;
 }
-function __PRIVATE_syncEngineEnsureWriteCallbacks(e) {
-  const t = __PRIVATE_debugCast(e);
-  return t.remoteStore.remoteSyncer.applySuccessfulWrite = __PRIVATE_syncEngineApplySuccessfulWrite.bind(null, t), t.remoteStore.remoteSyncer.rejectFailedWrite = __PRIVATE_syncEngineRejectFailedWrite.bind(null, t), t;
-}
 async function __PRIVATE_setOfflineComponentProvider(e, t) {
   e.asyncQueue.verifyOperationInProgress(), __PRIVATE_logDebug(Yt, "Initializing OfflineComponentProvider");
   const n = e.configuration;
@@ -13160,9 +12760,6 @@ async function __PRIVATE_ensureOfflineComponents(e) {
 async function __PRIVATE_ensureOnlineComponents(e) {
   return e._onlineComponents || (e._uninitializedComponentsProvider ? (__PRIVATE_logDebug(Yt, "Using user provided OnlineComponentProvider"), await __PRIVATE_setOnlineComponentProvider(e, e._uninitializedComponentsProvider._online)) : (__PRIVATE_logDebug(Yt, "Using default OnlineComponentProvider"), await __PRIVATE_setOnlineComponentProvider(e, new OnlineComponentProvider()))), e._onlineComponents;
 }
-function __PRIVATE_getSyncEngine(e) {
-  return __PRIVATE_ensureOnlineComponents(e).then(((e2) => e2.syncEngine));
-}
 async function __PRIVATE_getEventManager(e) {
   const t = await __PRIVATE_ensureOnlineComponents(e), n = t.eventManager;
   return n.onListen = __PRIVATE_syncEngineListen.bind(null, t.syncEngine), n.onUnlisten = __PRIVATE_syncEngineUnlisten.bind(null, t.syncEngine), n.onFirstRemoteStoreListen = __PRIVATE_triggerRemoteStoreListen.bind(null, t.syncEngine), n.onLastRemoteStoreUnlisten = __PRIVATE_triggerRemoteStoreUnlisten.bind(null, t.syncEngine), n;
@@ -13172,36 +12769,6 @@ function __PRIVATE_firestoreClientListen(e, t, n, r) {
   return e.asyncQueue.enqueueAndForget((async () => __PRIVATE_eventManagerListen(await __PRIVATE_getEventManager(e), s))), () => {
     i.ku(), e.asyncQueue.enqueueAndForget((async () => __PRIVATE_eventManagerUnlisten(await __PRIVATE_getEventManager(e), s)));
   };
-}
-function __PRIVATE_firestoreClientGetDocumentViaSnapshotListener(e, t, n = {}) {
-  const r = new __PRIVATE_Deferred();
-  return e.asyncQueue.enqueueAndForget((async () => (function __PRIVATE_readDocumentViaSnapshotListener(e2, t2, n2, r2, i) {
-    const s = new __PRIVATE_AsyncObserver({
-      next: (_) => {
-        s.ku(), t2.enqueueAndForget((() => __PRIVATE_eventManagerUnlisten(e2, o)));
-        const a = _.docs.has(n2);
-        !a && _.fromCache ? (
-          // TODO(dimond): If we're online and the document doesn't
-          // exist then we resolve with a doc.exists set to false. If
-          // we're offline however, we reject the Promise in this
-          // case. Two options: 1) Cache the negative response from
-          // the server so we can deliver that even when you're
-          // offline 2) Actually reject the Promise in the online case
-          // if the document doesn't exist.
-          i.reject(new FirestoreError(D.UNAVAILABLE, "Failed to get document because the client is offline."))
-        ) : a && _.fromCache && r2 && "server" === r2.source ? i.reject(new FirestoreError(D.UNAVAILABLE, 'Failed to get document from server. (However, this document does exist in the local cache. Run again without setting source to "server" to retrieve the cached document.)')) : i.resolve(_);
-      },
-      error: (e3) => i.reject(e3)
-    }), o = new __PRIVATE_QueryListener(__PRIVATE_newQueryForPath(n2.path), s, {
-      includeMetadataChanges: true,
-      $a: true
-    });
-    return __PRIVATE_eventManagerListen(e2, o);
-  })(await __PRIVATE_getEventManager(e), e.asyncQueue, t, n, r))), r.promise;
-}
-function __PRIVATE_firestoreClientWrite(e, t) {
-  const n = new __PRIVATE_Deferred();
-  return e.asyncQueue.enqueueAndForget((async () => __PRIVATE_syncEngineWrite(await __PRIVATE_getSyncEngine(e), t, n))), n.promise;
 }
 function __PRIVATE_cloneLongPollingOptions(e) {
   const t = {};
@@ -13256,24 +12823,6 @@ function collection(e, t, ...n) {
     );
   }
 }
-function doc(e, t, ...n) {
-  if (e = getModularInstance(e), // We allow omission of 'pathString' but explicitly prohibit passing in both
-  // 'undefined' and 'null'.
-  1 === arguments.length && (t = __PRIVATE_AutoId.newId()), __PRIVATE_validateNonEmptyArgument("doc", "path", t), e instanceof Firestore$1) {
-    const r = ResourcePath.fromString(t, ...n);
-    return __PRIVATE_validateDocumentPath(r), new DocumentReference(
-      e,
-      /* converter= */
-      null,
-      new DocumentKey(r)
-    );
-  }
-  {
-    if (!(e instanceof DocumentReference || e instanceof CollectionReference)) throw new FirestoreError(D.INVALID_ARGUMENT, "Expected first argument to doc() to be a CollectionReference, a DocumentReference or FirebaseFirestore");
-    const r = e._path.child(ResourcePath.fromString(t, ...n));
-    return __PRIVATE_validateDocumentPath(r), new DocumentReference(e.firestore, e instanceof CollectionReference ? e.converter : null, new DocumentKey(r));
-  }
-}
 function __PRIVATE_getMessageOrStack(e) {
   let t = e.message || "";
   return e.stack && (t = e.stack.includes(e.message) ? e.stack : e.message + "\n" + e.stack), t;
@@ -13325,23 +12874,6 @@ function __PRIVATE_isWrite(e) {
 function __PRIVATE_newUserDataReader(e) {
   const t = e._freezeSettings(), n = __PRIVATE_newSerializer(e._databaseId);
   return new __PRIVATE_UserDataReader(e._databaseId, !!t.ignoreUndefinedProperties, n);
-}
-function __PRIVATE_parseSetData(e, t, n, r, i, s = {}) {
-  const o = e.V(s.merge || s.mergeFields ? 2 : 0, t, n, i);
-  __PRIVATE_validatePlainObject("Data must be an object, but it was:", o, r);
-  const _ = __PRIVATE_parseObject(r, o);
-  let a, u;
-  if (s.merge) a = new FieldMask(o.fieldMask), u = o.fieldTransforms;
-  else if (s.mergeFields) {
-    const e2 = [];
-    for (const r2 of s.mergeFields) {
-      const i2 = __PRIVATE_fieldPathFromArgument(t, r2, n);
-      if (!o.contains(i2)) throw new FirestoreError(D.INVALID_ARGUMENT, `Field '${i2}' is specified in your field mask but missing from your input data.`);
-      __PRIVATE_fieldMaskContains(e2, i2) || e2.push(i2);
-    }
-    a = new FieldMask(e2), u = o.fieldTransforms.filter(((e3) => a.covers(e3.field)));
-  } else a = null, u = o.fieldTransforms;
-  return new ParsedSetData(new ObjectValue(_), a, u);
 }
 function __PRIVATE_parseQueryValue(e, t, n, r = false) {
   return __PRIVATE_parseData(n, e.V(r ? 4 : 3, t));
@@ -13521,13 +13053,7 @@ function __PRIVATE_createError(e, t, n, r, i) {
   let a = "";
   return (s || o) && (a += " (found", s && (a += ` in field ${r}`), o && (a += ` in document ${i}`), a += ")"), new FirestoreError(D.INVALID_ARGUMENT, _ + e + a);
 }
-function __PRIVATE_fieldMaskContains(e, t) {
-  return e.some(((e2) => e2.isEqual(t)));
-}
-function serverTimestamp() {
-  return new __PRIVATE_ServerTimestampFieldValueImpl("serverTimestamp");
-}
-var User, b, S, D, FirestoreError, __PRIVATE_Deferred, __PRIVATE_OAuthToken, __PRIVATE_EmptyAuthCredentialsProvider, __PRIVATE_EmulatorAuthCredentialsProvider, __PRIVATE_FirebaseAuthCredentialsProvider, __PRIVATE_FirstPartyToken, __PRIVATE_FirstPartyAuthCredentialsProvider, AppCheckToken, __PRIVATE_FirebaseAppCheckTokenProvider, __PRIVATE_AutoId, C, v, F, BasePath, ResourcePath, M, FieldPath$1, DocumentKey, x, O, Timestamp, SnapshotVersion, N, FieldIndex, IndexOffset, B, PersistenceTransaction, PersistencePromise, __PRIVATE_ListenSequence, q, U, $, W, G, j, Y, ee, oe, ae, le, Ee, Re, Ve, me, ge, ye, De, Me, Be, $e, Qe, Ge, ze, je, He, Ze, SortedMap, SortedMapIterator, LLRBNode, SortedSet, SortedSetIterator, FieldMask, __PRIVATE_Base64DecodeError, ByteString, Ye, et, tt, nt, rt, DatabaseInfo, it, DatabaseId, st, ot, _t, at, ut, lt, ObjectValue, MutableDocument, Bound, OrderBy, Filter, FieldFilter, CompositeFilter, __PRIVATE_KeyFieldFilter, __PRIVATE_KeyFieldInFilter, __PRIVATE_KeyFieldNotInFilter, __PRIVATE_ArrayContainsFilter, __PRIVATE_InFilter, __PRIVATE_NotInFilter, __PRIVATE_ArrayContainsAnyFilter, __PRIVATE_TargetImpl, __PRIVATE_QueryImpl, ObjectMap, ht, Pt, Tt, It, Et, TransformOperation, __PRIVATE_ServerTimestampTransform, __PRIVATE_ArrayUnionTransformOperation, __PRIVATE_ArrayRemoveTransformOperation, __PRIVATE_NumericTransformOperation, __PRIVATE_NumericIncrementTransformOperation, __PRIVATE_NumericMinimumTransformOperation, __PRIVATE_NumericMaximumTransformOperation, FieldTransform, MutationResult, Precondition, Mutation, __PRIVATE_SetMutation, __PRIVATE_PatchMutation, __PRIVATE_DeleteMutation, __PRIVATE_VerifyMutation, MutationBatch, MutationBatchResult, Overlay, ExistenceFilter, Rt, At, Vt, dt, BloomFilter, __PRIVATE_BloomFilterError, RemoteEvent, TargetChange, __PRIVATE_DocumentWatchChange, __PRIVATE_ExistenceFilterChange, __PRIVATE_WatchTargetChange, __PRIVATE_TargetState, mt, __PRIVATE_WatchChangeAggregator, ft, gt, pt, JsonProtoSerializer, TargetData, __PRIVATE_LocalSerializer, __PRIVATE_FirestoreIndexValueWriter, __PRIVATE_MemoryIndexManager, __PRIVATE_MemoryCollectionParentIndex, bt, St, Dt, LruParams, __PRIVATE_TargetIdGenerator, Ct, vt, __PRIVATE_RollingSequenceNumberBuffer, __PRIVATE_LruScheduler, __PRIVATE_LruGarbageCollectorImpl, RemoteDocumentChangeBuffer, OverlayedDocument, LocalDocumentsView, __PRIVATE_MemoryBundleCache, __PRIVATE_MemoryDocumentOverlayCache, __PRIVATE_MemoryGlobalsCache, __PRIVATE_ReferenceSet, __PRIVATE_DocReference, __PRIVATE_MemoryMutationQueue, __PRIVATE_MemoryRemoteDocumentCacheImpl, __PRIVATE_MemoryRemoteDocumentChangeBuffer, __PRIVATE_MemoryTargetCache, __PRIVATE_MemoryPersistence, __PRIVATE_MemoryTransaction, __PRIVATE_MemoryEagerDelegate, __PRIVATE_MemoryLruDelegate, __PRIVATE_LocalViewChanges, QueryContext, __PRIVATE_QueryEngine, Bt, Lt, __PRIVATE_LocalStoreImpl, __PRIVATE_LocalClientState, __PRIVATE_MemorySharedClientState, __PRIVATE_NoopConnectivityMonitor, $t, __PRIVATE_BrowserConnectivityMonitor, Wt, Qt, Gt, __PRIVATE_RestConnection, __PRIVATE_StreamBridge, zt, __PRIVATE_unguardedEventListen, __PRIVATE_WebChannelConnection, __PRIVATE_ExponentialBackoff, jt, __PRIVATE_PersistentStream, __PRIVATE_PersistentListenStream, __PRIVATE_PersistentWriteStream, Datastore, __PRIVATE_DatastoreImpl, __PRIVATE_OnlineStateTracker, Ht, __PRIVATE_RemoteStoreImpl, DelayedOperation, DocumentSet, __PRIVATE_DocumentChangeSet, ViewSnapshot, __PRIVATE_QueryListenersInfo, __PRIVATE_EventManagerImpl, Jt, Zt, __PRIVATE_QueryListener, __PRIVATE_AddedLimboDocument, __PRIVATE_RemovedLimboDocument, __PRIVATE_View, Xt, __PRIVATE_QueryView, LimboResolution, __PRIVATE_SyncEngineImpl, __PRIVATE_MemoryOfflineComponentProvider, __PRIVATE_LruGcMemoryOfflineComponentProvider, OnlineComponentProvider, __PRIVATE_AsyncObserver, Yt, FirestoreClient, en, tn, nn, rn, FirestoreSettingsImpl, Firestore$1, Query, DocumentReference, CollectionReference, sn, __PRIVATE_AsyncQueueImpl, Firestore, Bytes, FieldPath, FieldValue, GeoPoint, VectorValue, _n, ParsedSetData, __PRIVATE_ParseContextImpl, __PRIVATE_UserDataReader, __PRIVATE_ServerTimestampFieldValueImpl, an, AbstractUserDataWriter, __PRIVATE_ExpUserDataWriter;
+var User, b, S, D, FirestoreError, __PRIVATE_Deferred, __PRIVATE_OAuthToken, __PRIVATE_EmptyAuthCredentialsProvider, __PRIVATE_EmulatorAuthCredentialsProvider, __PRIVATE_FirebaseAuthCredentialsProvider, __PRIVATE_FirstPartyToken, __PRIVATE_FirstPartyAuthCredentialsProvider, AppCheckToken, __PRIVATE_FirebaseAppCheckTokenProvider, __PRIVATE_AutoId, C, v, F, BasePath, ResourcePath, M, FieldPath$1, DocumentKey, x, O, Timestamp, SnapshotVersion, N, FieldIndex, IndexOffset, B, PersistenceTransaction, PersistencePromise, __PRIVATE_ListenSequence, q, U, $, W, G, j, Y, ee, oe, ae, le, Ee, Re, Ve, me, ge, ye, De, Me, Be, $e, Qe, Ge, ze, je, He, Ze, SortedMap, SortedMapIterator, LLRBNode, SortedSet, SortedSetIterator, FieldMask, __PRIVATE_Base64DecodeError, ByteString, Ye, et, tt, nt, rt, DatabaseInfo, it, DatabaseId, st, ot, _t, at, ut, lt, ObjectValue, MutableDocument, Bound, OrderBy, Filter, FieldFilter, CompositeFilter, __PRIVATE_KeyFieldFilter, __PRIVATE_KeyFieldInFilter, __PRIVATE_KeyFieldNotInFilter, __PRIVATE_ArrayContainsFilter, __PRIVATE_InFilter, __PRIVATE_NotInFilter, __PRIVATE_ArrayContainsAnyFilter, __PRIVATE_TargetImpl, __PRIVATE_QueryImpl, ObjectMap, ht, Pt, Tt, It, Et, TransformOperation, __PRIVATE_ServerTimestampTransform, __PRIVATE_ArrayUnionTransformOperation, __PRIVATE_ArrayRemoveTransformOperation, __PRIVATE_NumericTransformOperation, __PRIVATE_NumericIncrementTransformOperation, __PRIVATE_NumericMinimumTransformOperation, __PRIVATE_NumericMaximumTransformOperation, Precondition, Mutation, __PRIVATE_SetMutation, __PRIVATE_PatchMutation, __PRIVATE_DeleteMutation, MutationBatch, Overlay, ExistenceFilter, Rt, At, Vt, dt, BloomFilter, __PRIVATE_BloomFilterError, RemoteEvent, TargetChange, __PRIVATE_DocumentWatchChange, __PRIVATE_ExistenceFilterChange, __PRIVATE_WatchTargetChange, __PRIVATE_TargetState, mt, __PRIVATE_WatchChangeAggregator, ft, gt, pt, JsonProtoSerializer, TargetData, __PRIVATE_LocalSerializer, __PRIVATE_FirestoreIndexValueWriter, __PRIVATE_MemoryIndexManager, __PRIVATE_MemoryCollectionParentIndex, bt, St, Dt, LruParams, __PRIVATE_TargetIdGenerator, Ct, vt, __PRIVATE_RollingSequenceNumberBuffer, __PRIVATE_LruScheduler, __PRIVATE_LruGarbageCollectorImpl, RemoteDocumentChangeBuffer, OverlayedDocument, LocalDocumentsView, __PRIVATE_MemoryBundleCache, __PRIVATE_MemoryDocumentOverlayCache, __PRIVATE_MemoryGlobalsCache, __PRIVATE_ReferenceSet, __PRIVATE_DocReference, __PRIVATE_MemoryMutationQueue, __PRIVATE_MemoryRemoteDocumentCacheImpl, __PRIVATE_MemoryRemoteDocumentChangeBuffer, __PRIVATE_MemoryTargetCache, __PRIVATE_MemoryPersistence, __PRIVATE_MemoryTransaction, __PRIVATE_MemoryEagerDelegate, __PRIVATE_MemoryLruDelegate, __PRIVATE_LocalViewChanges, QueryContext, __PRIVATE_QueryEngine, Bt, Lt, __PRIVATE_LocalStoreImpl, __PRIVATE_LocalClientState, __PRIVATE_MemorySharedClientState, __PRIVATE_NoopConnectivityMonitor, $t, __PRIVATE_BrowserConnectivityMonitor, Wt, Qt, Gt, __PRIVATE_RestConnection, __PRIVATE_StreamBridge, zt, __PRIVATE_unguardedEventListen, __PRIVATE_WebChannelConnection, __PRIVATE_ExponentialBackoff, jt, __PRIVATE_PersistentStream, __PRIVATE_PersistentListenStream, Datastore, __PRIVATE_DatastoreImpl, __PRIVATE_OnlineStateTracker, Ht, __PRIVATE_RemoteStoreImpl, DelayedOperation, DocumentSet, __PRIVATE_DocumentChangeSet, ViewSnapshot, __PRIVATE_QueryListenersInfo, __PRIVATE_EventManagerImpl, Jt, Zt, __PRIVATE_QueryListener, __PRIVATE_AddedLimboDocument, __PRIVATE_RemovedLimboDocument, __PRIVATE_View, Xt, __PRIVATE_QueryView, LimboResolution, __PRIVATE_SyncEngineImpl, __PRIVATE_MemoryOfflineComponentProvider, __PRIVATE_LruGcMemoryOfflineComponentProvider, OnlineComponentProvider, __PRIVATE_AsyncObserver, Yt, FirestoreClient, en, tn, nn, rn, FirestoreSettingsImpl, Firestore$1, Query, DocumentReference, CollectionReference, sn, __PRIVATE_AsyncQueueImpl, Firestore, Bytes, FieldPath, FieldValue, GeoPoint, VectorValue, _n, __PRIVATE_ParseContextImpl, __PRIVATE_UserDataReader, an, AbstractUserDataWriter, __PRIVATE_ExpUserDataWriter;
 var init_common_b3e8012f_esm = __esm({
   "node_modules/@firebase/firestore/dist/common-b3e8012f.esm.js"() {
     init_index_esm4();
@@ -15510,16 +15036,6 @@ var init_common_b3e8012f_esm = __esm({
     };
     __PRIVATE_NumericMaximumTransformOperation = class extends __PRIVATE_NumericTransformOperation {
     };
-    FieldTransform = class {
-      constructor(e, t) {
-        this.field = e, this.transform = t;
-      }
-    };
-    MutationResult = class {
-      constructor(e, t) {
-        this.version = e, this.transformResults = t;
-      }
-    };
     Precondition = class _Precondition {
       constructor(e, t) {
         this.updateTime = e, this.exists = t;
@@ -15565,14 +15081,6 @@ var init_common_b3e8012f_esm = __esm({
     __PRIVATE_DeleteMutation = class extends Mutation {
       constructor(e, t) {
         super(), this.key = e, this.precondition = t, this.type = 2, this.fieldTransforms = [];
-      }
-      getFieldMask() {
-        return null;
-      }
-    };
-    __PRIVATE_VerifyMutation = class extends Mutation {
-      constructor(e, t) {
-        super(), this.key = e, this.precondition = t, this.type = 3, this.fieldTransforms = [];
       }
       getFieldMask() {
         return null;
@@ -15643,28 +15151,6 @@ var init_common_b3e8012f_esm = __esm({
       }
       isEqual(e) {
         return this.batchId === e.batchId && __PRIVATE_arrayEquals(this.mutations, e.mutations, ((e2, t) => __PRIVATE_mutationEquals(e2, t))) && __PRIVATE_arrayEquals(this.baseMutations, e.baseMutations, ((e2, t) => __PRIVATE_mutationEquals(e2, t)));
-      }
-    };
-    MutationBatchResult = class _MutationBatchResult {
-      constructor(e, t, n, r) {
-        this.batch = e, this.commitVersion = t, this.mutationResults = n, this.docVersions = r;
-      }
-      /**
-       * Creates a new MutationBatchResult for the given batch and results. There
-       * must be one result for each mutation in the batch. This static factory
-       * caches a document=&gt;version mapping (docVersions).
-       */
-      static from(e, t, n) {
-        __PRIVATE_hardAssert(e.mutations.length === n.length, 58842, {
-          me: e.mutations.length,
-          fe: n.length
-        });
-        let r = /* @__PURE__ */ (function __PRIVATE_documentVersionMap() {
-          return Tt;
-        })();
-        const i = e.mutations;
-        for (let e2 = 0; e2 < i.length; e2++) r = r.insert(i[e2].key, n[e2].version);
-        return new _MutationBatchResult(e, t, n, r);
       }
     };
     Overlay = class {
@@ -18335,57 +17821,6 @@ Total Duration: ${a - u}ms`);
         t.database = __PRIVATE_getEncodedDatabaseId(this.serializer), t.removeTarget = e, this.k_(t);
       }
     };
-    __PRIVATE_PersistentWriteStream = class extends __PRIVATE_PersistentStream {
-      constructor(e, t, n, r, i, s) {
-        super(e, "write_stream_connection_backoff", "write_stream_idle", "health_check_timeout", t, n, r, s), this.serializer = i;
-      }
-      /**
-       * Tracks whether or not a handshake has been successfully exchanged and
-       * the stream is ready to accept mutations.
-       */
-      get X_() {
-        return this.v_ > 0;
-      }
-      // Override of PersistentStream.start
-      start() {
-        this.lastStreamToken = void 0, super.start();
-      }
-      U_() {
-        this.X_ && this.Y_([]);
-      }
-      z_(e, t) {
-        return this.connection.P_("Write", e, t);
-      }
-      j_(e) {
-        return __PRIVATE_hardAssert(!!e.streamToken, 31322), this.lastStreamToken = e.streamToken, // The first response is always the handshake response
-        __PRIVATE_hardAssert(!e.writeResults || 0 === e.writeResults.length, 55816), this.listener.ea();
-      }
-      onNext(e) {
-        __PRIVATE_hardAssert(!!e.streamToken, 12678), this.lastStreamToken = e.streamToken, // A successful first write response means the stream is healthy,
-        // Note, that we could consider a successful handshake healthy, however,
-        // the write itself might be causing an error we want to back off from.
-        this.F_.reset();
-        const t = __PRIVATE_fromWriteResults(e.writeResults, e.commitTime), n = __PRIVATE_fromVersion(e.commitTime);
-        return this.listener.ta(n, t);
-      }
-      /**
-       * Sends an initial streamToken to the server, performing the handshake
-       * required to make the StreamingWrite RPC work. Subsequent
-       * calls should wait until onHandshakeComplete was called.
-       */
-      na() {
-        const e = {};
-        e.database = __PRIVATE_getEncodedDatabaseId(this.serializer), this.k_(e);
-      }
-      /** Sends a group of mutations to the Firestore backend to apply. */
-      Y_(e) {
-        const t = {
-          streamToken: this.lastStreamToken,
-          writes: e.map(((e2) => toMutation(this.serializer, e2)))
-        };
-        this.k_(t);
-      }
-    };
     Datastore = class {
     };
     __PRIVATE_DatastoreImpl = class extends Datastore {
@@ -19897,14 +19332,6 @@ This typically indicates that your device does not have a healthy Internet conne
       vectorValues: property("object")
     };
     _n = /^__.*__$/;
-    ParsedSetData = class {
-      constructor(e, t, n) {
-        this.data = e, this.fieldMask = t, this.fieldTransforms = n;
-      }
-      toMutation(e, t) {
-        return null !== this.fieldMask ? new __PRIVATE_PatchMutation(e, this.data, this.fieldMask, t, this.fieldTransforms) : new __PRIVATE_SetMutation(e, this.data, t, this.fieldTransforms);
-      }
-    };
     __PRIVATE_ParseContextImpl = class ___PRIVATE_ParseContextImpl {
       /**
        * Initializes a ParseContext with the given source and path.
@@ -19991,14 +19418,6 @@ This typically indicates that your device does not have a healthy Internet conne
           arrayElement: false,
           hasConverter: r
         }, this.databaseId, this.serializer, this.ignoreUndefinedProperties);
-      }
-    };
-    __PRIVATE_ServerTimestampFieldValueImpl = class ___PRIVATE_ServerTimestampFieldValueImpl extends FieldValue {
-      _toFieldTransform(e) {
-        return new FieldTransform(e.path, new __PRIVATE_ServerTimestampTransform());
-      }
-      isEqual(e) {
-        return e instanceof ___PRIVATE_ServerTimestampFieldValueImpl;
       }
     };
     an = new RegExp("[~\\*/\\[\\]]");
@@ -20177,10 +19596,6 @@ function __PRIVATE_validateNewFieldFilter(t, e) {
   if (null !== n)
     throw n === e.op ? new FirestoreError(D.INVALID_ARGUMENT, `Invalid query. You cannot use more than one '${e.op.toString()}' filter.`) : new FirestoreError(D.INVALID_ARGUMENT, `Invalid query. You cannot use '${e.op.toString()}' filters with '${n.toString()}' filters.`);
 }
-function __PRIVATE_applyFirestoreDataConverter(t, e, n) {
-  let r;
-  return r = t ? n && (n.merge || n.mergeFields) ? t.toFirestore(e, n) : t.toFirestore(e) : e, r;
-}
 function __PRIVATE_resultChangeType(t) {
   switch (t) {
     case 0:
@@ -20195,20 +19610,6 @@ function __PRIVATE_resultChangeType(t) {
         type: t
       });
   }
-}
-function getDoc(t) {
-  t = __PRIVATE_cast(t, DocumentReference);
-  const e = __PRIVATE_cast(t.firestore, Firestore), n = ensureFirestoreConfigured(e);
-  return __PRIVATE_firestoreClientGetDocumentViaSnapshotListener(n, t._key).then(((n2) => __PRIVATE_convertToDocSnapshot(e, t, n2)));
-}
-function setDoc(t, e, n) {
-  t = __PRIVATE_cast(t, DocumentReference);
-  const r = __PRIVATE_cast(t.firestore, Firestore), s = __PRIVATE_applyFirestoreDataConverter(t.converter, e, n), o = __PRIVATE_newUserDataReader(r);
-  return executeWrite(r, [__PRIVATE_parseSetData(o, "setDoc", t._key, s, null !== t.converter, n).toMutation(t._key, Precondition.none())]);
-}
-function addDoc(t, e) {
-  const n = __PRIVATE_cast(t.firestore, Firestore), r = doc(t), s = __PRIVATE_applyFirestoreDataConverter(t.converter, e), o = __PRIVATE_newUserDataReader(t.firestore);
-  return executeWrite(n, [__PRIVATE_parseSetData(o, "addDoc", r._key, s, null !== t.converter, {}).toMutation(r._key, Precondition.exists(false))]).then((() => r));
 }
 function onSnapshot(t, ...e) {
   t = getModularInstance(t);
@@ -20247,10 +19648,6 @@ function onSnapshot(t, ...e) {
   }
   const h = ensureFirestoreConfigured(i);
   return __PRIVATE_firestoreClientListen(h, c, s, o);
-}
-function executeWrite(t, e) {
-  const n = ensureFirestoreConfigured(t);
-  return __PRIVATE_firestoreClientWrite(n, e);
 }
 function __PRIVATE_convertToDocSnapshot(t, e, n) {
   const r = n.docs.get(e._key), s = new __PRIVATE_ExpUserDataWriter(t);
@@ -20691,917 +20088,88 @@ var init_firebase_config = __esm({
   }
 });
 
-// popup.js
-var require_popup = __commonJS({
-  "popup.js"() {
+// offscreen.js
+var require_offscreen = __commonJS({
+  "offscreen.js"() {
     init_firebase_config();
-    var appState = {};
-    var selDuration = 25;
-    var timerTick = null;
-    var isSignupMode = false;
-    var orgState = { orgId: null, orgName: null, adminBlocklist: [] };
-    var SOUND_NAMES = {
-      rain: "\u{1F327}\uFE0F Rain",
-      storm: "\u26C8\uFE0F Storm",
-      forest: "\u{1F332} Forest",
-      ocean: "\u{1F30A} Ocean",
-      fire: "\u{1F525} Fireplace",
-      cafe: "\u2615 Caf\xE9",
-      wind: "\u{1F343} Wind",
-      brown: "\u{1F3A7} Brown Noise",
-      white: "\u{1F4FB} White Noise"
-    };
-    function alive() {
-      try {
-        return !!chrome?.runtime?.id;
-      } catch (_) {
-        return false;
+    var AC = null;
+    function ctx() {
+      if (!AC) AC = new (self.AudioContext || self.webkitAudioContext)();
+      return AC;
+    }
+    function beep({ freq = 880, start = 0, dur = 0.15, type = "sine", gain = 0.25 }) {
+      const ac = ctx();
+      const t0 = ac.currentTime + start;
+      const osc = ac.createOscillator();
+      const g = ac.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, t0);
+      g.gain.setValueAtTime(1e-4, t0);
+      g.gain.exponentialRampToValueAtTime(gain, t0 + 0.015);
+      g.gain.exponentialRampToValueAtTime(1e-4, t0 + dur);
+      osc.connect(g).connect(ac.destination);
+      osc.start(t0);
+      osc.stop(t0 + dur + 0.03);
+    }
+    function playChime() {
+      const ac = ctx();
+      if (ac.state === "suspended") ac.resume();
+      let t = 0;
+      for (let i = 0; i < 5; i++) {
+        beep({ freq: 880, start: t, dur: 0.16, type: "square", gain: 0.34 });
+        beep({ freq: 660, start: t + 0.18, dur: 0.16, type: "square", gain: 0.34 });
+        t += 0.4;
       }
     }
-    function safeSend(msg, cb) {
-      if (!alive()) return;
-      try {
-        chrome.runtime.sendMessage(msg, (r) => {
-          if (chrome.runtime.lastError) return;
-          cb && cb(r);
-        });
-      } catch (e) {
-        console.warn("[popup]", e);
+    var annUnsub = null;
+    var listenOrg = null;
+    var desiredOrg = null;
+    var authedUser = null;
+    function reconcile() {
+      const wantOrg = authedUser && desiredOrg ? desiredOrg : null;
+      if (wantOrg === listenOrg) return;
+      if (annUnsub) {
+        annUnsub();
+        annUnsub = null;
       }
-    }
-    var ANN_PRIORITIES = {
-      information: { icon: "\u{1F4E2}", dismissible: true, rank: 0 },
-      important: { icon: "\u26A0\uFE0F", dismissible: true, rank: 1 },
-      critical: { icon: "\u{1F6D1}", dismissible: false, rank: 2 },
-      emergency: { icon: "\u{1F6A8}", dismissible: false, rank: 3 }
-    };
-    var annMeta = (p) => ANN_PRIORITIES[p] || ANN_PRIORITIES.information;
-    async function getIdSet(key) {
-      const res = await chrome.storage.local.get([key]);
-      return Array.isArray(res[key]) ? res[key] : [];
-    }
-    async function addIdToSet(key, id) {
-      const arr = await getIdSet(key);
-      if (!arr.includes(id)) {
-        arr.push(id);
-        await chrome.storage.local.set({ [key]: arr });
-      }
-    }
-    async function renderAnnouncements(items) {
-      const list = g("announcement-list");
-      if (!list) return;
-      const dismissed = await getIdSet("dismissedAnnIds");
-      const visible = items.filter((it2) => it2 && it2.id && it2.message && !dismissed.includes(it2.id)).sort((a, b2) => annMeta(b2.priority).rank - annMeta(a.priority).rank);
-      list.innerHTML = "";
-      for (const it2 of visible) {
-        const meta = annMeta(it2.priority);
-        const level = ANN_PRIORITIES[it2.priority] ? it2.priority : "information";
-        const row = document.createElement("div");
-        row.className = `ann p-${level}`;
-        row.dataset.annId = it2.id;
-        const ico = document.createElement("span");
-        ico.className = "ann-ico";
-        ico.textContent = meta.icon;
-        const msg = document.createElement("span");
-        msg.className = "ann-msg";
-        msg.textContent = it2.message;
-        row.appendChild(ico);
-        row.appendChild(msg);
-        const btn = document.createElement("button");
-        if (meta.dismissible) {
-          btn.className = "ann-act ann-x";
-          btn.title = "Dismiss";
-          btn.textContent = "\xD7";
-        } else {
-          btn.className = "ann-act ann-ack";
-          btn.title = "Acknowledge to dismiss";
-          btn.textContent = "Acknowledge";
-        }
-        btn.addEventListener("click", () => dismissAnnouncement(it2.id, row));
-        row.appendChild(btn);
-        list.appendChild(row);
-      }
-      for (const it2 of visible) await addIdToSet("seenAnnIds", it2.id);
-      clearBadge();
-    }
-    async function dismissAnnouncement(id, node) {
-      await addIdToSet("dismissedAnnIds", id);
-      if (node?.parentNode) node.parentNode.removeChild(node);
-      clearBadge();
-    }
-    function clearBadge() {
-      if (chrome.action) chrome.action.setBadgeText({ text: "" });
-      chrome.storage.local.set({ unreadAnnouncements: 0 });
-    }
-    document.addEventListener("DOMContentLoaded", async () => {
-      initAuthUI();
-      if (chrome.action) {
-        chrome.action.setBadgeText({ text: "" });
-        chrome.storage.local.set({ unreadAnnouncements: 0 });
-      }
-      onAuthStateChanged(auth, async (user) => {
-        if (user) {
-          setDisp("auth-overlay", "none");
-          setDisp("user-info-bar", "flex");
-          const emailEl = g("user-email-display");
-          if (emailEl) emailEl.textContent = user.email || "User";
-          try {
-            const token = await user.getIdToken();
-            chrome.storage.local.set({ firebaseIdToken: token, firebaseUid: user.uid });
-          } catch (_) {
-          }
-          const stored = await chrome.storage.local.get(["orgId", "orgName"]);
-          if (stored.orgId) {
-            orgState.orgId = stored.orgId;
-            orgState.orgName = stored.orgName;
-          }
-          startCloudSync();
-          if (stored.orgId) {
-            startOrgSync(stored.orgId);
-          }
-          await loadState();
-          initNav();
-          initTimer();
-          initSounds();
-          initBlock();
-          initOrgConnect();
-          initSettings();
-          renderOrgUI();
-          initAttendance();
-        } else {
-          setDisp("auth-overlay", "flex");
-          setDisp("user-info-bar", "none");
-          setDisp("org-badge", "none");
-          chrome.storage.local.remove(["firebaseIdToken", "firebaseUid"]);
-        }
-      });
-    });
-    function initAuthUI() {
-      const btnAction = g("btn-auth-action");
-      const btnGoogle = g("btn-google");
-      const btnToggle = g("btn-auth-toggle");
-      const btnLogout = g("btn-logout");
-      const errBox = g("auth-error");
-      const loader = g("auth-loader");
-      const pwdToggle = g("auth-pwd-toggle");
-      const setLoader = (on2) => {
-        if (loader) loader.style.display = on2 ? "block" : "none";
-      };
-      const hideErr = () => {
-        if (errBox) errBox.style.display = "none";
-      };
-      if (pwdToggle) {
-        pwdToggle.addEventListener("click", (e) => {
-          e.preventDefault();
-          const pwdInp = g("auth-pwd");
-          if (pwdInp.type === "password") {
-            pwdInp.type = "text";
-            pwdToggle.textContent = "\u{1F648}";
-          } else {
-            pwdInp.type = "password";
-            pwdToggle.textContent = "\u{1F441}\uFE0F";
-          }
-        });
-      }
-      btnToggle.addEventListener("click", () => {
-        isSignupMode = !isSignupMode;
-        g("auth-mode-title").textContent = isSignupMode ? "Sign Up" : "Log In";
-        btnAction.textContent = isSignupMode ? "Sign Up" : "Log In";
-        btnToggle.textContent = isSignupMode ? "Already have an account? Log In" : "Need an account? Sign Up";
-        hideErr();
-      });
-      btnLogout.addEventListener("click", () => {
-        signOut(auth);
-      });
-      btnAction.addEventListener("click", async () => {
-        const email = g("auth-email").value.trim();
-        const pwd = g("auth-pwd").value;
-        if (!email || !pwd) return showError("Please fill in both fields");
-        setLoader(true);
-        hideErr();
-        try {
-          if (isSignupMode) {
-            await createUserWithEmailAndPassword(auth, email, pwd);
-          } else {
-            await signInWithEmailAndPassword(auth, email, pwd);
-          }
-        } catch (e) {
-          showError(e.message);
-        } finally {
-          setLoader(false);
-        }
-      });
-      btnGoogle.addEventListener("click", async () => {
-        setLoader(true);
-        hideErr();
-        try {
-          chrome.identity.getAuthToken({ interactive: true }, async (token) => {
-            if (chrome.runtime.lastError || !token) {
-              setLoader(false);
-              return showError(chrome.runtime.lastError?.message || "Google Auth failed");
-            }
-            try {
-              const credential = GoogleAuthProvider.credential(null, token);
-              await signInWithCredential(auth, credential);
-            } catch (e) {
-              showError(e.message);
-            } finally {
-              setLoader(false);
-            }
+      listenOrg = wantOrg;
+      if (!wantOrg) return;
+      annUnsub = onSnapshot(
+        query(collection(db, "organisations", wantOrg, "announcements"), where("active", "==", true)),
+        (snap) => {
+          const active = snap.docs.map((d) => ({
+            id: d.id,
+            message: d.data().message || "",
+            priority: d.data().priority || "information"
+          })).filter((a) => a.message);
+          chrome.runtime.sendMessage({ type: "ANNOUNCEMENTS_SNAPSHOT", active }).catch(() => {
           });
-        } catch (e) {
-          showError(e.message);
-          setLoader(false);
-        }
-      });
-    }
-    function showError(msg) {
-      const el = g("auth-error");
-      if (!el) return;
-      el.textContent = msg;
-      el.style.display = "block";
-    }
-    var _cloudUnsubs = [];
-    function stopCloudSync() {
-      _cloudUnsubs.forEach((u) => {
-        try {
-          u();
-        } catch (_) {
-        }
-      });
-      _cloudUnsubs = [];
-    }
-    function startCloudSync() {
-      stopCloudSync();
-      const unsubAnn = onSnapshot(doc(db, "global_settings", "announcements"), async (snap) => {
-        if (orgState.orgId) return;
-        if (snap.exists()) {
-          const d = snap.data();
-          if (d.active && d.message) {
-            await renderAnnouncements([{
-              id: `global:${d.message}`,
-              message: d.message,
-              priority: d.priority || "information"
-            }]);
-            return;
-          }
-        }
-        await renderAnnouncements([]);
-      }, () => {
-      });
-      const unsubBl = onSnapshot(doc(db, "global_settings", "blocklist"), (snap) => {
-        if (snap.exists()) {
-          chrome.storage.local.set({ globalBlocklist: snap.data().sites || [] });
-        }
-      }, () => {
-      });
-      _cloudUnsubs = [unsubAnn, unsubBl];
-    }
-    function startOrgSync(orgId) {
-      chrome.storage.local.get(["orgAdminBlocklist"], (res) => {
-        orgState.adminBlocklist = res.orgAdminBlocklist || [];
-        renderAdminBlocklist();
-      });
-      chrome.storage.onChanged.addListener((changes, area) => {
-        if (area === "local" && changes.orgAdminBlocklist) {
-          orgState.adminBlocklist = changes.orgAdminBlocklist.newValue || [];
-          renderAdminBlocklist();
-        }
-      });
-      onSnapshot(
-        query(
-          collection(db, "organisations", orgId, "announcements"),
-          where("active", "==", true)
-        ),
-        async (snap) => {
-          const items = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-          await renderAnnouncements(items);
         },
-        () => {
-        }
+        (err) => console.warn("[FF] offscreen ann listener:", err)
       );
     }
-    async function connectOrg(code) {
-      const errEl = g("org-connect-error");
-      if (errEl) errEl.style.display = "none";
-      try {
-        const indexSnap = await getDoc(doc(db, "orgIndex", code.trim().toUpperCase()));
-        if (!indexSnap.exists()) {
-          if (errEl) {
-            errEl.textContent = "Organisation not found. Check the code and try again.";
-            errEl.style.display = "block";
-          }
-          return;
+    chrome.runtime.onMessage.addListener((msg) => {
+      if (!msg || msg.target !== "offscreen") return;
+      if (msg.type === "PLAY_ANNOUNCEMENT_SOUND") {
+        try {
+          playChime(msg.priority || "information");
+        } catch (e) {
+          console.warn("[FF] chime:", e);
         }
-        const orgId = indexSnap.data().orgId;
-        const orgName = indexSnap.data().orgName;
-        const user = auth.currentUser;
-        if (user) {
-          try {
-            await setDoc(
-              doc(db, "organisations", orgId, "members", user.uid),
-              {
-                email: user.email,
-                name: user.displayName || user.email,
-                role: "employee",
-                joinedAt: serverTimestamp(),
-                lastActive: serverTimestamp()
-              },
-              { merge: true }
-            );
-            await setDoc(
-              doc(db, "userOrgMap", user.uid),
-              { orgId, orgName, role: "employee" },
-              { merge: true }
-            );
-          } catch (memberErr) {
-            console.warn("[popup] member registration skipped (check Firestore rules):", memberErr.code);
-          }
-        }
-        await chrome.storage.local.set({ orgId, orgName });
-        orgState.orgId = orgId;
-        orgState.orgName = orgName;
-        startOrgSync(orgId);
-        renderOrgUI();
-        initAttendance();
-        showToast(`\u{1F3E2} Joined ${orgName}`);
-      } catch (e) {
-        if (errEl) {
-          errEl.textContent = "Failed to join. Please try again.";
-          errEl.style.display = "block";
-        }
-        console.warn("[popup] connectOrg:", e);
+      } else if (msg.type === "START_ANN_LISTENER") {
+        desiredOrg = msg.orgId || null;
+        reconcile();
       }
-    }
-    function renderOrgUI() {
-      const badge = g("org-badge");
-      const connected = g("org-connected");
-      const connectForm = g("org-connect");
-      if (orgState.orgId) {
-        if (badge) badge.style.display = "flex";
-        if (g("org-badge-name")) g("org-badge-name").textContent = orgState.orgName;
-        if (connected) connected.style.display = "block";
-        if (connectForm) connectForm.style.display = "none";
-        if (g("org-name-badge")) g("org-name-badge").textContent = orgState.orgName;
-        renderAdminBlocklist();
-      } else {
-        if (badge) badge.style.display = "none";
-        if (connected) connected.style.display = "none";
-        if (connectForm) connectForm.style.display = "block";
-      }
-    }
-    var attendBound = false;
-    function localDateStr(d = /* @__PURE__ */ new Date()) {
-      const m = String(d.getMonth() + 1).padStart(2, "0");
-      const day = String(d.getDate()).padStart(2, "0");
-      return `${d.getFullYear()}-${m}-${day}`;
-    }
-    function fmtAttendTime(t) {
-      if (!t) return "";
-      const d = t.toDate ? t.toDate() : new Date(t);
-      return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    }
-    function attendRef() {
-      const user = auth.currentUser;
-      if (!user || !orgState.orgId) return null;
-      return doc(db, "organisations", orgState.orgId, "attendance", `${user.uid}_${localDateStr()}`);
-    }
-    function renderAttend(data) {
-      const status = g("attend-status");
-      const txt = g("attend-status-txt");
-      const btnIn = g("btn-check-in");
-      const btnOut = g("btn-check-out");
-      if (!status || !txt || !btnIn || !btnOut) return;
-      status.classList.remove("in", "done");
-      if (!data || !data.checkInTime) {
-        txt.textContent = "Not checked in today";
-        btnIn.style.display = "";
-        btnIn.disabled = false;
-        btnOut.style.display = "none";
-      } else if (!data.checkOutTime) {
-        status.classList.add("in");
-        txt.textContent = `Checked in ${fmtAttendTime(data.checkInTime)}`;
-        btnIn.style.display = "none";
-        btnOut.style.display = "";
-        btnOut.disabled = false;
-      } else {
-        status.classList.add("done");
-        txt.textContent = `In ${fmtAttendTime(data.checkInTime)} \xB7 Out ${fmtAttendTime(data.checkOutTime)}`;
-        btnIn.style.display = "none";
-        btnOut.style.display = "none";
-      }
-    }
-    async function loadAttend() {
-      const ref = attendRef();
-      if (!ref) return;
-      try {
-        const snap = await getDoc(ref);
-        renderAttend(snap.exists() ? snap.data() : null);
-      } catch (e) {
-        console.warn("[attendance] load", e?.code, e?.message);
-      }
-    }
-    async function checkIn() {
-      const ref = attendRef();
-      const user = auth.currentUser;
-      if (!ref || !user) return;
-      const btn = g("btn-check-in");
-      if (btn) btn.disabled = true;
-      try {
-        await setDoc(ref, {
-          userId: user.uid,
-          userEmail: user.email,
-          userName: user.displayName || user.email,
-          date: localDateStr(),
-          checkInTime: /* @__PURE__ */ new Date(),
-          createdAt: serverTimestamp()
-        }, { merge: true });
-        showToast("\u2713 Checked in");
-        await loadAttend();
-      } catch (e) {
-        console.warn("[attendance] check-in", e?.code, e?.message);
-        if (btn) btn.disabled = false;
-        showToast("Check-in failed");
-      }
-    }
-    async function checkOut() {
-      const ref = attendRef();
-      if (!ref) return;
-      const btn = g("btn-check-out");
-      if (btn) btn.disabled = true;
-      try {
-        await setDoc(ref, {
-          checkOutTime: /* @__PURE__ */ new Date(),
-          updatedAt: serverTimestamp()
-        }, { merge: true });
-        showToast("\u2713 Checked out");
-        await loadAttend();
-      } catch (e) {
-        console.warn("[attendance] check-out", e?.code, e?.message);
-        if (btn) btn.disabled = false;
-        showToast("Check-out failed");
-      }
-    }
-    function initAttendance() {
-      const card = g("attend-card");
-      if (!card) return;
-      if (!orgState.orgId || !auth.currentUser) {
-        card.style.display = "none";
-        return;
-      }
-      card.style.display = "flex";
-      if (!attendBound) {
-        g("btn-check-in")?.addEventListener("click", checkIn);
-        g("btn-check-out")?.addEventListener("click", checkOut);
-        attendBound = true;
-      }
-      loadAttend();
-    }
-    function renderAdminBlocklist() {
-      const el = g("admin-bl-list");
-      if (!el) return;
-      const list = orgState.adminBlocklist;
-      if (!list.length) {
-        el.innerHTML = `<div style="text-align:center;padding:12px 0;font-size:11px;color:var(--t3)">No admin-blocked sites</div>`;
-        return;
-      }
-      const ICO = { twitter: "\u{1F426}", x: "\u2716\uFE0F", facebook: "\u{1F464}", instagram: "\u{1F4F8}", tiktok: "\u{1F3B5}", reddit: "\u{1F916}", netflix: "\u{1F3AC}", twitch: "\u{1F3AE}", discord: "\u{1F4AC}", youtube: "\u{1F4FA}" };
-      el.innerHTML = list.map((d) => `
-    <div class="drow locked">
-      <span class="dico">${ICO[d.split(".")[0]] || "\u{1F310}"}</span>
-      <span class="dname">${esc(d)}</span>
-      <span class="lock-ico" title="Admin-controlled">\u{1F512}</span>
-    </div>`).join("");
-    }
-    function initOrgConnect() {
-      const inp = g("org-code-inp");
-      const btn = g("btn-join-org");
-      const leave = g("btn-leave-org");
-      inp?.addEventListener("input", () => {
-        if (inp) inp.value = inp.value.toUpperCase();
-      });
-      inp?.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" && inp.value.trim()) connectOrg(inp.value);
-      });
-      btn?.addEventListener("click", () => {
-        const code = (inp?.value || "").trim();
-        if (!code) {
-          const err = g("org-connect-error");
-          if (err) {
-            err.textContent = "Enter your organisation code.";
-            err.style.display = "block";
-          }
-          return;
-        }
-        connectOrg(code);
-      });
-      leave?.addEventListener("click", async () => {
-        await chrome.storage.local.remove(["orgId", "orgName", "orgAdminBlocklist"]);
-        orgState = { orgId: null, orgName: null, adminBlocklist: [] };
-        renderOrgUI();
-        initAttendance();
-        showToast("Left organisation");
-      });
-    }
-    async function syncSessionsToOrg(history) {
-      if (!orgState.orgId || !auth.currentUser || !history.length) return;
-      try {
-        const { orgLastSync } = await chrome.storage.local.get(["orgLastSync"]);
-        const lastSync = orgLastSync || 0;
-        const unsynced = history.filter((s) => {
-          try {
-            return new Date(s.date).getTime() >= lastSync;
-          } catch (_) {
-            return false;
-          }
-        });
-        if (!unsynced.length) return;
-        const user = auth.currentUser;
-        await Promise.all(unsynced.slice(0, 10).map(
-          (s) => addDoc(collection(db, "organisations", orgState.orgId, "sessions"), {
-            userId: user.uid,
-            userEmail: user.email,
-            sessionName: s.sessionName || "Deep Work",
-            duration: s.duration || 25,
-            elapsed: s.elapsed || 0,
-            completed: !!s.completed,
-            date: new Date(s.date)
-          })
-        ));
-        await chrome.storage.local.set({ orgLastSync: Date.now() });
-      } catch (_) {
-      }
-    }
-    async function loadState() {
-      return new Promise((resolve) => {
-        safeSend({ type: "GET_STATE" }, (r) => {
-          appState = r || {};
-          renderAll();
-          resolve();
-        });
-        setTimeout(resolve, 3e3);
-      });
-    }
-    function renderAll() {
-      const { focusState, history, streaks, blocklist, sound, audioTabOpen } = appState;
-      g("streak-val").textContent = streaks?.current || 0;
-      g("status-dot").classList.toggle("on", !!focusState?.active);
-      focusState?.active ? showActive(focusState) : showIdle();
-      renderStats(history || [], streaks || {});
-      renderBlocklist(blocklist || []);
-      restoreSoundUI(sound, audioTabOpen);
-      if (orgState.orgId) syncSessionsToOrg(history || []);
-    }
-    function g(id) {
-      return document.getElementById(id);
-    }
-    function setDisp(id, value) {
-      const el = g(id);
-      if (el) el.style.display = value;
-    }
-    function restoreSoundUI(sound, audioTabOpen) {
-      if (!sound?.id) return;
-      document.querySelectorAll(".scard").forEach((c) => {
-        c.classList.toggle("on", c.dataset.snd === sound.id);
-      });
-      const np = g("now-play");
-      const name4 = g("now-name");
-      if (np) np.style.display = audioTabOpen ? "flex" : "none";
-      if (name4) name4.textContent = SOUND_NAMES[sound.id] || sound.id;
-      const vol = g("vol-master");
-      const vv = g("vval");
-      if (vol) vol.value = Math.round((sound.volume || 0.6) * 100);
-      if (vv) vv.textContent = Math.round((sound.volume || 0.6) * 100) + "%";
-      const btn = g("audio-tab-btn");
-      if (btn) {
-        btn.textContent = audioTabOpen ? "\u{1F50A} Audio tab open" : "\u25B6 Open audio tab";
-        btn.style.color = audioTabOpen ? "#3fb950" : "#818cf8";
-      }
-    }
-    function initNav() {
-      document.querySelectorAll(".ntab").forEach((tab) => {
-        tab.addEventListener("click", () => {
-          document.querySelectorAll(".ntab").forEach((t) => t.classList.remove("on"));
-          document.querySelectorAll(".pnl").forEach((p) => p.classList.remove("on"));
-          tab.classList.add("on");
-          g(`pnl-${tab.dataset.tab}`)?.classList.add("on");
-        });
-      });
-    }
-    function initSettings() {
-      const notif = g("set-notif");
-      const annSound = g("set-ann-sound");
-      const testBtn = g("btn-test-sound");
-      chrome.storage.local.get(["settings"], (res) => {
-        const s = res.settings || {};
-        if (notif) notif.checked = s.notificationsEnabled !== false;
-        if (annSound) annSound.checked = s.announcementSoundEnabled !== false;
-      });
-      const save = (key, val) => {
-        chrome.storage.local.get(["settings"], (res) => {
-          const s = res.settings || {};
-          s[key] = val;
-          chrome.storage.local.set({ settings: s });
-        });
-      };
-      notif?.addEventListener("change", () => save("notificationsEnabled", notif.checked));
-      annSound?.addEventListener("change", () => save("announcementSoundEnabled", annSound.checked));
-      testBtn?.addEventListener("click", () => {
-        safeSend({ type: "PLAY_ANNOUNCEMENT_SOUND", priority: "information" });
-        showToast("\u{1F514} Test sound");
-      });
-    }
-    function initTimer() {
-      document.querySelectorAll(".dbtn").forEach((b2) => {
-        b2.addEventListener("click", () => {
-          document.querySelectorAll(".dbtn").forEach((x2) => x2.classList.remove("sel"));
-          b2.classList.add("sel");
-          selDuration = parseInt(b2.dataset.val);
-          g("cust-dur").value = "";
-          if (!appState.focusState?.active) setTimerDisplay(selDuration * 60);
-        });
-      });
-      g("cust-dur")?.addEventListener("input", (e) => {
-        const v2 = parseInt(e.target.value);
-        if (v2 >= 1 && v2 <= 240) {
-          selDuration = v2;
-          document.querySelectorAll(".dbtn").forEach((x2) => x2.classList.remove("sel"));
-          if (!appState.focusState?.active) setTimerDisplay(selDuration * 60);
-        }
-      });
-      document.querySelectorAll(".chip").forEach((c) => {
-        c.addEventListener("click", () => {
-          const inp = g("task-inp");
-          if (inp) inp.value = c.dataset.v || "";
-        });
-      });
-      g("btn-start")?.addEventListener("click", startSession);
-      g("btn-stop")?.addEventListener("click", stopSession);
-    }
-    function showIdle() {
-      setDisp("setup-form", "flex");
-      setDisp("active-ctrl", "none");
-      setDisp("prog-wrap", "none");
-      g("sbadge")?.classList.remove("run");
-      const bt2 = g("sbadge-txt");
-      if (bt2) bt2.textContent = "No active session";
-      const lbl = g("t-lbl");
-      if (lbl) {
-        lbl.textContent = "READY";
-        lbl.classList.remove("run");
-      }
-      setRing(0);
-      setTimerDisplay(selDuration * 60);
-      stopTick();
-    }
-    function showActive(fs) {
-      setDisp("setup-form", "none");
-      setDisp("active-ctrl", "block");
-      setDisp("prog-wrap", "block");
-      g("sbadge")?.classList.add("run");
-      const bt2 = g("sbadge-txt");
-      if (bt2) bt2.textContent = fs.sessionName || "Deep Work";
-      const lbl = g("t-lbl");
-      if (lbl) {
-        lbl.textContent = "FOCUSING";
-        lbl.classList.add("run");
-      }
-      startTick(fs);
-    }
-    function startTick(fs) {
-      stopTick();
-      const total = (fs.duration || 25) * 60 * 1e3;
-      const tick = () => {
-        const rem = Math.max(0, (fs.endTime || Date.now()) - Date.now());
-        const prog = Math.min(1, 1 - rem / total);
-        setTimerDisplay(Math.ceil(rem / 1e3));
-        setRing(prog);
-        const fill = g("prog-fill");
-        if (fill) fill.style.width = (prog * 100).toFixed(1) + "%";
-        const ringWrap = g("ring-wrap");
-        if (ringWrap) ringWrap.classList.toggle("urgent", rem > 0 && rem < 5 * 60 * 1e3);
-        if (rem <= 0) {
-          stopTick();
-          loadState();
-        }
-      };
-      tick();
-      timerTick = setInterval(tick, 500);
-    }
-    function stopTick() {
-      if (timerTick) {
-        clearInterval(timerTick);
-        timerTick = null;
-      }
-    }
-    function setTimerDisplay(secs) {
-      const s = Math.max(0, Math.floor(secs));
-      const el = g("t-time");
-      if (el) el.textContent = String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
-    }
-    function setRing(p) {
-      const el = g("ring");
-      if (el) el.style.strokeDashoffset = (408.41 * (1 - Math.min(1, Math.max(0, p)))).toFixed(2);
-    }
-    function startSession() {
-      const name4 = (g("task-inp")?.value || "").trim() || "Deep Work";
-      safeSend({ type: "START_FOCUS", data: { sessionName: name4, duration: selDuration } }, () => {
-        showToast("\u{1F680} Session started!");
-        loadState();
-      });
-    }
-    function stopSession() {
-      if (!confirm("End this focus session early?")) return;
-      safeSend({ type: "STOP_FOCUS", completed: false }, () => {
-        showToast("Session ended.");
-        loadState();
-      });
-    }
-    function initSounds() {
-      document.querySelectorAll(".scard").forEach((card) => {
-        card.addEventListener("click", () => {
-          const id = card.dataset.snd;
-          if (card.classList.contains("on")) {
-            safeSend({ type: "STOP_SOUND" }, () => {
-              card.classList.remove("on");
-              setDisp("now-play", "none");
-              g("mix-box")?.classList.remove("show");
-              updateAudioTabBtn(false);
-              showToast("\u23F9 Sound stopped");
-            });
-            return;
-          }
-          const vol = (g("vol-master")?.value || 60) / 100;
-          safeSend({ type: "PLAY_SOUND", soundId: id, volume: vol }, () => {
-            document.querySelectorAll(".scard").forEach((c) => c.classList.remove("on"));
-            card.classList.add("on");
-            const np = g("now-play");
-            const name4 = g("now-name");
-            if (np) np.style.display = "flex";
-            if (name4) name4.textContent = SOUND_NAMES[id] || id;
-            g("mix-box")?.classList.add("show");
-            updateAudioTabBtn(true);
-            showToast(`\u{1F3B5} ${SOUND_NAMES[id]} \u2014 playing in background tab`);
-          });
-        });
-      });
-      g("vol-master")?.addEventListener("input", (e) => {
-        const v2 = e.target.value / 100;
-        g("vval").textContent = e.target.value + "%";
-        safeSend({ type: "SET_VOLUME", volume: v2 });
-      });
-      g("ml1")?.addEventListener("input", (e) => {
-        safeSend({ type: "SET_LAYER", layer: 0, volume: e.target.value / 100 });
-      });
-      g("ml2")?.addEventListener("input", (e) => {
-        safeSend({ type: "SET_LAYER", layer: 1, volume: e.target.value / 100 });
-      });
-      g("audio-tab-btn")?.addEventListener("click", () => {
-        safeSend({ type: "GET_STATE" }, (r) => {
-          const sound = r?.sound;
-          if (sound?.id) {
-            safeSend({ type: "PLAY_SOUND", soundId: sound.id, volume: sound.volume || 0.6 }, () => {
-              updateAudioTabBtn(true);
-              showToast("\u{1F3B5} Audio tab reopened");
-            });
-          } else {
-            showToast("Pick a sound first");
-          }
-        });
-      });
-    }
-    function updateAudioTabBtn(open) {
-      const btn = g("audio-tab-btn");
-      if (!btn) return;
-      btn.textContent = open ? "\u{1F50A} Audio running in tab" : "\u25B6 Open audio tab";
-      btn.style.color = open ? "#3fb950" : "#818cf8";
-    }
-    function renderStats(history, streaks) {
-      const total = history.reduce((s, h) => s + (h.elapsed || 0), 0);
-      const hrs = Math.floor(total / 60), mins = total % 60;
-      if (g("s-sess")) g("s-sess").textContent = history.length;
-      if (g("s-time")) g("s-time").textContent = hrs > 0 ? `${hrs}h${mins}m` : `${mins}m`;
-      if (g("s-best")) g("s-best").textContent = streaks.best || 0;
-      renderHeatmap(history);
-      const list = g("hist-list");
-      if (!list) return;
-      if (!history.length) {
-        list.innerHTML = `<div class="empty"><div class="eico">\u{1F4ED}</div><div class="etxt">No sessions yet.<br>Start your first!</div></div>`;
-        return;
-      }
-      list.innerHTML = history.slice(0, 20).map((item) => {
-        const d = new Date(item.date);
-        const ts = isToday(d) ? `Today ${d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : `${d.toLocaleDateString([], { month: "short", day: "numeric" })} ${d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
-        return `<div class="hi">
-      <div class="hdot ${item.completed ? "d" : "p"}"></div>
-      <div class="hinfo">
-        <div class="hname">${esc(item.sessionName || "Deep Work")}</div>
-        <div class="hmeta">${ts}</div>
-      </div>
-      <div class="hrgt">
-        <div class="hmins">${item.elapsed || 0}m</div>
-        <div class="hbadge ${item.completed ? "bd" : "bp"}">${item.completed ? "\u2713 Done" : "\u25D0 Partial"}</div>
-      </div>
-    </div>`;
-      }).join("");
-    }
-    function renderHeatmap(history) {
-      const wrap2 = g("heatmap");
-      if (!wrap2) return;
-      const DAYS = ["S", "M", "T", "W", "T", "F", "S"], now = /* @__PURE__ */ new Date();
-      wrap2.innerHTML = Array.from({ length: 7 }, (_, i) => {
-        const d = new Date(now);
-        d.setDate(d.getDate() - (6 - i));
-        const key = d.toDateString();
-        const m = history.filter((h) => new Date(h.date).toDateString() === key).reduce((s, h) => s + (h.elapsed || 0), 0);
-        const lvl = m >= 120 ? 4 : m >= 60 ? 3 : m >= 30 ? 2 : m >= 10 ? 1 : 0;
-        return `<div class="hday"><div class="hcell${lvl ? " l" + lvl : ""}" title="${m}min"></div><div class="hlbl">${DAYS[d.getDay()]}</div></div>`;
-      }).join("");
-    }
-    function isToday(d) {
-      return d.toDateString() === (/* @__PURE__ */ new Date()).toDateString();
-    }
-    function esc(s) {
-      const e = document.createElement("div");
-      e.appendChild(document.createTextNode(String(s)));
-      return e.innerHTML;
-    }
-    function initBlock() {
-      g("btn-add-d")?.addEventListener("click", addDomain);
-      g("d-inp")?.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") addDomain();
-      });
-    }
-    function renderBlocklist(list) {
-      const el = g("d-list");
-      if (!el) return;
-      const adminBl = orgState.adminBlocklist || [];
-      const filtered = list.filter((d) => !adminBl.includes(d));
-      if (!filtered.length) {
-        el.innerHTML = orgState.orgId ? `<div class="empty"><div class="eico">\u{1F6E1}\uFE0F</div><div class="etxt">No personal sites blocked.<br>Admin-blocked sites are in the Org tab.</div></div>` : `<div class="empty"><div class="eico">\u{1F6E1}\uFE0F</div><div class="etxt">No sites blocked yet.</div></div>`;
-        return;
-      }
-      const ICO = { twitter: "\u{1F426}", x: "\u2716\uFE0F", facebook: "\u{1F464}", instagram: "\u{1F4F8}", tiktok: "\u{1F3B5}", reddit: "\u{1F916}", netflix: "\u{1F3AC}", twitch: "\u{1F3AE}", discord: "\u{1F4AC}", youtube: "\u{1F4FA}" };
-      el.innerHTML = filtered.map((d, i) => `
-    <div class="drow">
-      <span class="dico">${ICO[d.split(".")[0]] || "\u{1F310}"}</span>
-      <span class="dname">${esc(d)}</span>
-      <button class="xbtn" data-i="${i}">\xD7</button>
-    </div>`).join("");
-      el.querySelectorAll(".xbtn").forEach((b2) => {
-        b2.addEventListener("click", () => removeDomain(parseInt(b2.dataset.i)));
-      });
-    }
-    function addDomain() {
-      const inp = g("d-inp");
-      if (!inp) return;
-      const raw = inp.value.trim().toLowerCase().replace(/^(https?:\/\/)?(www\.)?/, "").split("/")[0];
-      if (!raw || !raw.includes(".")) {
-        showToast("\u26A0\uFE0F Enter a valid domain");
-        return;
-      }
-      if (orgState.adminBlocklist.includes(raw)) {
-        showToast("\u26A0\uFE0F This site is already locked by your admin");
-        inp.value = "";
-        return;
-      }
-      const bl = [...appState.blocklist || []];
-      if (bl.includes(raw)) {
-        showToast("Already blocked");
-        inp.value = "";
-        return;
-      }
-      bl.push(raw);
-      appState.blocklist = bl;
-      safeSend({ type: "UPDATE_BLOCKLIST", blocklist: bl }, () => {
-        renderBlocklist(bl);
-        showToast(`\u{1F512} ${raw} blocked`);
-      });
-      inp.value = "";
-    }
-    function removeDomain(i) {
-      const bl = [...appState.blocklist || []];
-      if (i < 0 || i >= bl.length) return;
-      const removed = bl[i];
-      bl.splice(i, 1);
-      appState.blocklist = bl;
-      safeSend({ type: "UPDATE_BLOCKLIST", blocklist: bl }, () => {
-        renderBlocklist(bl);
-        showToast(`\u2705 ${removed} removed`);
-      });
-    }
-    var toastTimer = null;
-    function showToast(msg) {
-      const el = g("toast");
-      if (!el) return;
-      el.textContent = msg;
-      el.classList.add("show");
-      if (toastTimer) clearTimeout(toastTimer);
-      toastTimer = setTimeout(() => el.classList.remove("show"), 2800);
-    }
+    });
+    onAuthStateChanged(auth, (u) => {
+      authedUser = u;
+      reconcile();
+    });
+    chrome.runtime.sendMessage({ type: "OFFSCREEN_READY" }).catch(() => {
+    });
   }
 });
-export default require_popup();
+export default require_offscreen();
 /*! Bundled license information:
 
 @firebase/util/dist/index.esm.js:
@@ -22192,4 +20760,4 @@ firebase/app/dist/esm/index.esm.js:
    * limitations under the License.
    *)
 */
-//# sourceMappingURL=popup.js.map
+//# sourceMappingURL=offscreen.js.map

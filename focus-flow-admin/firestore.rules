@@ -1,0 +1,107 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() { return request.auth != null; }
+
+    function isOrgAdmin(orgId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/organisations/$(orgId))
+        && get(/databases/$(database)/documents/organisations/$(orgId)).data.adminUid == request.auth.uid;
+    }
+
+    function userMap() {
+      return get(/databases/$(database)/documents/userOrgMap/$(request.auth.uid)).data;
+    }
+
+    function isOrgManager(orgId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/userOrgMap/$(request.auth.uid))
+        && userMap().orgId == orgId && userMap().role == 'manager';
+    }
+
+    function isOrgStaff(orgId) { return isOrgAdmin(orgId) || isOrgManager(orgId); }
+
+    function isOrgMember(orgId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/organisations/$(orgId)/members/$(request.auth.uid));
+    }
+
+    // Join-by-code lookup. Any signed-in user reads; only staff write/regenerate.
+    match /orgIndex/{code} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isOrgStaff(request.resource.data.orgId);
+      allow delete: if isSignedIn() && isOrgStaff(resource.data.orgId);
+    }
+
+    // User -> org/role. Self may register as employee; staff manage their org's users.
+    match /userOrgMap/{uid} {
+      allow read: if isSignedIn() && (uid == request.auth.uid || isOrgStaff(resource.data.orgId));
+      allow create, update: if isSignedIn() && (
+        (uid == request.auth.uid && request.resource.data.role == 'employee')
+        || isOrgStaff(request.resource.data.orgId));
+      allow delete: if isSignedIn() && (uid == request.auth.uid || isOrgStaff(resource.data.orgId));
+    }
+
+    // Global announcements + blocklist: readable by all signed-in users; writes via Admin SDK.
+    match /global_settings/{docId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    match /organisations/{orgId} {
+      allow read: if isSignedIn() && (
+        resource.data.adminUid == request.auth.uid || isOrgManager(orgId) || isOrgMember(orgId));
+      allow create: if isSignedIn() && request.resource.data.adminUid == request.auth.uid;
+      allow update: if isSignedIn()
+        && (resource.data.adminUid == request.auth.uid || isOrgManager(orgId))
+        && request.resource.data.adminUid == resource.data.adminUid;  // adminUid immutable
+      allow delete: if false;
+
+      // Team members: self-register as employee; staff manage roles/removals.
+      match /members/{memberId} {
+        allow read: if isOrgStaff(orgId) || memberId == request.auth.uid;
+        allow create: if isSignedIn() && memberId == request.auth.uid
+          && request.resource.data.role == 'employee';
+        allow update: if isOrgStaff(orgId)
+          || (memberId == request.auth.uid && request.resource.data.role == 'employee');
+        allow delete: if isOrgStaff(orgId) || memberId == request.auth.uid;
+      }
+
+      // Admin blocklist/schedule: read by members (extension) + staff; write staff.
+      match /policy/{docId} {
+        allow read: if isSignedIn();
+        allow write: if isOrgStaff(orgId);
+      }
+
+      // Announcements: read by any signed-in user (no regression); write staff only.
+      match /announcements/{annId} {
+        allow read: if isSignedIn();
+        allow write: if isOrgStaff(orgId);
+      }
+
+      // Focus sessions: members append their own; staff read; append-only.
+      match /sessions/{sessionId} {
+        allow read: if isOrgStaff(orgId);
+        allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+        allow update, delete: if false;
+      }
+
+      // Attendance: members write + read their own day-record (check-in create +
+      // check-out update); staff read all. Ownership derives from the doc id
+      // (`${uid}_${date}`) so reads of a not-yet-created day-record return empty
+      // instead of being denied via a null `resource`. userId immutable; no deletes.
+      match /attendance/{docId} {
+        allow read:   if isOrgStaff(orgId)
+          || (isSignedIn() && docId.split('_')[0] == request.auth.uid);
+        allow create: if isSignedIn()
+          && docId.split('_')[0] == request.auth.uid
+          && request.resource.data.userId == request.auth.uid;
+        allow update: if isSignedIn()
+          && docId.split('_')[0] == request.auth.uid
+          && request.resource.data.userId == resource.data.userId;
+        allow delete: if false;
+      }
+    }
+  }
+}

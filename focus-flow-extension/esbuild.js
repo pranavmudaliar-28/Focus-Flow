@@ -2,7 +2,7 @@ const esbuild = require('esbuild');
 
 // Build background and UI scripts as ES modules
 esbuild.build({
-  entryPoints: ['popup.js', 'background.js', 'audio.js'],
+  entryPoints: ['popup.js', 'background.js', 'audio.js', 'offscreen.js'],
   bundle: true,
   outdir: 'dist',
   minify: false,

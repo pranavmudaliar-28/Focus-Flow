@@ -13,6 +13,7 @@ import Policy from '@/pages/Policy'
 import Announcements from '@/pages/Announcements'
 import Team from '@/pages/Team'
 import Analytics from '@/pages/Analytics'
+import Attendance from '@/pages/Attendance'
 import Billing from '@/pages/Billing'
 import Settings from '@/pages/Settings'
 import NoAccess from '@/pages/NoAccess'
@@ -65,6 +66,7 @@ export default function App() {
           <Route path="/announcements" element={<Announcements />} />
           <Route path="/team" element={<Team />} />
           <Route path="/analytics" element={<Analytics />} />
+          <Route path="/attendance" element={<Attendance />} />
 
           {/* Admin-only routes — managers are redirected to /dashboard */}
           <Route element={<AdminOnlyRoute />}>
